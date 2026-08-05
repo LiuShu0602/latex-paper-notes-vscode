@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../dist/webview.css">
+  <title>Paper Notes Webview Harness</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    (() => {
+      const noteId = 'method:offset-correction';
+      const base = `${location.protocol}//${location.host}`;
+      let persisted;
+      window.__paperNotesMessages = [];
+      window.acquireVsCodeApi = () => ({
+        getState: () => persisted,
+        setState: (value) => { persisted = value; },
+        postMessage: (message) => {
+          window.__paperNotesMessages.push(message);
+          if (message.type === 'ready') {
+            queueMicrotask(() => window.dispatchEvent(new MessageEvent('message', {
+              data: {
+                type: 'state',
+                tab: 'annotatedPdf',
+                currentId: noteId,
+                notes: [{
+                  id: noteId,
+                  documentId: 'main',
+                  sourceFile: 'sections/method.tex',
+                  title: 'Why an offset preserves ordering',
+                  sectionTitle: 'Method',
+                  sourceSnapshot: 'Subtracting a fixed offset preserves the order of sensor readings.',
+                  sourceHash: '0'.repeat(64),
+                  sourceSelector: {
+                    exact: 'Subtracting a fixed offset preserves the order of sensor readings.',
+                    prefix: '',
+                    suffix: '',
+                    normalizedHash: '0'.repeat(64),
+                    previousOffset: 0
+                  },
+                  excerptMode: 'auto',
+                  excerpt: 'Subtracting a fixed offset preserves the order of sensor readings.',
+                  items: [{ id: 'smoke-item', type: 'thought', format: 'markdown', content: 'Browser-level click smoke test.' }],
+                  createdAt: '2026-08-05T00:00:00.000Z',
+                  updatedAt: '2026-08-05T00:00:00.000Z',
+                  markerStatus: 'linked',
+                  sourceOrder: 0
+                }],
+                markerProblems: [],
+                annotatedPdf: { uri: `${base}/test/.generated/annotated.pdf`, available: true },
+                notesPdf: { uri: `${base}/test/.generated/notes.pdf`, available: true },
+                workerUri: `${base}/dist/pdf.worker.min.mjs`,
+                locale: 'en',
+                project: { rootFile: 'main.tex', sourceFiles: ['main.tex', 'sections/method.tex'], notesDir: 'notes' },
+                assetBaseUri: `${base}/example/notes/`
+              }
+            })));
+          }
+        }
+      });
+    })();
+  </script>
+  <script src="../dist/webview.js"></script>
+</body>
+</html>

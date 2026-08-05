@@ -1,0 +1,20 @@
+% !TeX program = latexmk
+\documentclass[11pt,a4paper]{ctexart}
+\usepackage[margin=25mm]{geometry}
+\usepackage{amsmath,amssymb,mathtools,booktabs,tabularx,graphicx,xcolor,xurl}
+\usepackage{notes/paper-notes-style}
+\usepackage{xr-hyper}
+\usepackage[hidelinks]{hyperref}
+\externaldocument[main-]{notes/build/paper/main}[paper_annotated.pdf]
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black}
+\title{Paper Notes / 论文伴随笔记}
+\author{Research notes}
+\date{\today}
+\begin{document}
+\maketitle
+\tableofcontents
+\clearpage
+\input{notes/main_notes}
+\clearpage
+\PrintNoteTypeIndex
+\end{document}

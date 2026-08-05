@@ -1,0 +1,30 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{notes/paper-notes-paper}[2026/08/06 v0.3.1 LaTeX Paper Notes integration]
+\RequirePackage{xcolor}
+\ifdefined\PaperNotesDraft
+  \RequirePackage{xr-hyper}
+\fi
+\PassOptionsToPackage{hidelinks}{hyperref}
+\RequirePackage{hyperref}
+\makeatletter
+\providecommand{\PaperNotesAuxBase}{notes/build/notes/paper_notes}
+\providecommand{\PaperNotesPdfLink}{paper_notes.pdf}
+\ifdefined\PaperNotesDraft
+  \externaldocument[notes-]{\PaperNotesAuxBase}[\PaperNotesPdfLink]
+\fi
+\newcommand{\PNMainNoteDestination}[1]{pnote.main.#1}
+\newcommand{\PNMainNoteAnchor}[1]{%
+  \Hy@raisedlink{\hyper@anchorstart{\PNMainNoteDestination{#1}}\hyper@anchorend}%
+  \begingroup\edef\@currentHref{\PNMainNoteDestination{#1}}\label{pnote:#1}\endgroup}
+\newcommand{\PNMainNoteMarker}[1]{%
+  \allowbreak\textsuperscript{\hyperref[notes-note:main:#1]{%
+    \textcolor{blue!70!black}{\scriptsize[N\ref*{notes-note:main:#1}]}}}}
+\newcommand{\PaperNoteBegin}[1]{%
+  \PNMainNoteAnchor{#1}%
+  \ifdefined\PaperNotesDraft\begingroup\color{blue!70!black}\fi}
+\newcommand{\PaperNoteEnd}[1]{%
+  \ifdefined\PaperNotesDraft\PNMainNoteMarker{#1}\endgroup\fi}
+\newcommand{\PaperNoteAnchor}[1]{%
+  \PNMainNoteAnchor{#1}%
+  \ifdefined\PaperNotesDraft\PNMainNoteMarker{#1}\fi}
+\makeatother

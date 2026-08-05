@@ -1,0 +1,261 @@
+{
+  "name": "latex-paper-notes",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.3.1",
+  "publisher": "latex-paper-notes",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LiuShu0602/latex-paper-notes-vscode.git"
+  },
+  "homepage": "https://github.com/LiuShu0602/latex-paper-notes-vscode#readme",
+  "bugs": {
+    "url": "https://github.com/LiuShu0602/latex-paper-notes-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.114.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "latex",
+    "academic notes",
+    "paper",
+    "pdf",
+    "synctex"
+  ],
+  "activationEvents": [
+    "onLanguage:latex",
+    "onCommand:paperNotes.initializeProject",
+    "onCommand:paperNotes.openPanel",
+    "onCommand:paperNotes.projectDoctor",
+    "onCommand:paperNotes.addFromSelection",
+    "onCommand:paperNotes.syncFromCursor"
+  ],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%untrustedDescription%",
+      "restrictedConfigurations": [
+        "paperNotes.dataFile",
+        "paperNotes.latexmkExecutable",
+        "paperNotes.pdflatexExecutable",
+        "paperNotes.xelatexExecutable",
+        "paperNotes.lualatexExecutable",
+        "paperNotes.makeindexExecutable",
+        "paperNotes.synctexExecutable",
+        "paperNotes.kpsewhichExecutable"
+      ]
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "paperNotes.initializeProject",
+        "title": "%command.initialize%",
+        "category": "%category%",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "paperNotes.openPanel",
+        "title": "%command.openPanel%",
+        "category": "%category%",
+        "icon": "$(notebook)"
+      },
+      {
+        "command": "paperNotes.addFromSelection",
+        "title": "%command.addSelection%",
+        "category": "%category%",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "paperNotes.quickBuild",
+        "title": "%command.quickBuild%",
+        "category": "%category%",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "paperNotes.fullBuild",
+        "title": "%command.fullBuild%",
+        "category": "%category%",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "paperNotes.validate",
+        "title": "%command.validate%",
+        "category": "%category%",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "paperNotes.relink",
+        "title": "%command.relink%",
+        "category": "%category%",
+        "icon": "$(link)"
+      },
+      {
+        "command": "paperNotes.syncFromCursor",
+        "title": "%command.syncFromCursor%",
+        "category": "%category%",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "paperNotes.projectDoctor",
+        "title": "%command.doctor%",
+        "category": "%category%",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "paperNotes.rescanSources",
+        "title": "%command.rescan%",
+        "category": "%category%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "paperNotes.repairIntegration",
+        "title": "%command.repair%",
+        "category": "%category%",
+        "icon": "$(wrench)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "paperNotes.addFromSelection",
+          "when": "editorLangId == latex && editorHasSelection && paperNotes.projectReady && paperNotes.isManagedTex && isWorkspaceTrusted",
+          "group": "navigation@8"
+        },
+        {
+          "command": "paperNotes.relink",
+          "when": "editorLangId == latex && editorHasSelection && paperNotes.projectReady && paperNotes.isManagedTex && isWorkspaceTrusted",
+          "group": "navigation@9"
+        },
+        {
+          "command": "paperNotes.syncFromCursor",
+          "when": "editorLangId == latex && paperNotes.projectReady && paperNotes.isManagedTex",
+          "group": "navigation@10"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "paperNotes.initializeProject",
+          "when": "!paperNotes.projectReady && isWorkspaceTrusted"
+        },
+        {
+          "command": "paperNotes.addFromSelection",
+          "when": "paperNotes.projectReady && paperNotes.isManagedTex && isWorkspaceTrusted"
+        },
+        {
+          "command": "paperNotes.quickBuild",
+          "when": "paperNotes.projectReady && isWorkspaceTrusted"
+        },
+        {
+          "command": "paperNotes.fullBuild",
+          "when": "paperNotes.projectReady && isWorkspaceTrusted"
+        },
+        {
+          "command": "paperNotes.rescanSources",
+          "when": "paperNotes.projectReady && isWorkspaceTrusted"
+        },
+        {
+          "command": "paperNotes.repairIntegration",
+          "when": "paperNotes.projectReady && isWorkspaceTrusted"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "paperNotes.addFromSelection",
+        "key": "ctrl+alt+n",
+        "when": "editorTextFocus && editorLangId == latex && editorHasSelection && paperNotes.isManagedTex && isWorkspaceTrusted"
+      }
+    ],
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "paperNotes.dataFile": {
+          "type": "string",
+          "default": "notes/paper-notes.json",
+          "scope": "resource",
+          "description": "%configuration.dataFile%"
+        },
+        "paperNotes.latexmkExecutable": {
+          "type": "string",
+          "default": "latexmk",
+          "scope": "machine",
+          "description": "%configuration.latexmk%"
+        },
+        "paperNotes.pdflatexExecutable": {
+          "type": "string",
+          "default": "pdflatex",
+          "scope": "machine",
+          "description": "%configuration.pdflatex%"
+        },
+        "paperNotes.xelatexExecutable": {
+          "type": "string",
+          "default": "xelatex",
+          "scope": "machine",
+          "description": "%configuration.xelatex%"
+        },
+        "paperNotes.lualatexExecutable": {
+          "type": "string",
+          "default": "lualatex",
+          "scope": "machine",
+          "description": "%configuration.lualatex%"
+        },
+        "paperNotes.makeindexExecutable": {
+          "type": "string",
+          "default": "makeindex",
+          "scope": "machine",
+          "description": "%configuration.makeindex%"
+        },
+        "paperNotes.synctexExecutable": {
+          "type": "string",
+          "default": "synctex",
+          "scope": "machine",
+          "description": "%configuration.synctex%"
+        },
+        "paperNotes.kpsewhichExecutable": {
+          "type": "string",
+          "default": "kpsewhich",
+          "scope": "machine",
+          "description": "%configuration.kpsewhich%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "check": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:webview": "python test/webview-smoke.py",
+    "test:integration": "npm run build && node --import tsx test/integration/run.ts",
+    "test:latex-render": "node --import tsx scripts/check-clean-render.ts",
+    "test:all": "npm run check && npm run test && npm run build && npm run test:webview",
+    "package": "npm run test:all && vsce package --no-dependencies --no-rewrite-relative-links && node scripts/audit-vsix.mjs latex-paper-notes-0.3.1.vsix"
+  },
+  "dependencies": {
+    "katex": "^0.16.22",
+    "markdown-it": "^14.1.0",
+    "pdfjs-dist": "^5.4.149"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.8",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.114.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.1",
+    "esbuild": "^0.25.0",
+    "adm-zip": "^0.5.16",
+    "pdf-lib": "^1.17.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

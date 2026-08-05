@@ -1,0 +1,22 @@
+% !TeX program = pdflatex
+\documentclass[11pt]{article}
+
+% >>> LaTeX Paper Notes integration >>>
+% This block is optional for clean builds. Deleting notes/ keeps the paper compilable.
+\IfFileExists{notes/paper-notes-paper.sty}{%
+  \usepackage{notes/paper-notes-paper}%
+}{%
+  \providecommand{\PaperNoteBegin}[1]{}%
+  \providecommand{\PaperNoteEnd}[1]{}%
+  \providecommand{\PaperNoteAnchor}[1]{}%
+}%
+% <<< LaTeX Paper Notes integration <<<
+\usepackage[a4paper,margin=28mm]{geometry}
+\usepackage{amsmath}
+\title{A Synthetic Paper on Temperature Sensor Calibration}
+\author{Example Author}
+\begin{document}
+\maketitle
+\input{sections/introduction}
+\input{sections/method}
+\end{document}

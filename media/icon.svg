@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Paper notes icon">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8f3e8"/>
+      <stop offset="1" stop-color="#ded6c5"/>
+    </linearGradient>
+  </defs>
+  <path d="M24 12h58l22 22v82H24z" fill="url(#paper)" stroke="#173d70" stroke-width="6"/>
+  <path d="M82 12v24h22" fill="none" stroke="#173d70" stroke-width="6"/>
+  <path d="M42 50h45M42 66h45M42 82h28" stroke="#173d70" stroke-width="6" stroke-linecap="round"/>
+  <path d="M78 90l12 12 24-31" fill="none" stroke="#2f72c4" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 3,
+  "project": {
+    "rootFile": "main.tex",
+    "sourceFiles": [
+      "main.tex",
+      "sections/introduction.tex",
+      "sections/method.tex"
+    ],
+    "paperEngine": "pdflatex",
+    "notesEngine": "xelatex",
+    "notesDir": "notes",
+    "generatedNotesFile": "notes/main_notes.tex",
+    "annotatedWrapper": "notes/paper_annotated.tex",
+    "annotatedPdf": "notes/paper_annotated.pdf",
+    "notesPdf": "notes/paper_notes.pdf",
+    "build": {
+      "mode": "builtin"
+    }
+  },
+  "notes": [
+    {
+      "id": "method:offset-correction",
+      "documentId": "main",
+      "sourceFile": "sections/method.tex",
+      "title": "Why an offset preserves ordering",
+      "sectionTitle": "Method",
+      "sourceSnapshot": "Subtracting a fixed offset corrects the reading while preserving the order of observations.",
+      "sourceHash": "a2b916d838bb052842ae4d9914fee2f1f2eaba309c9a2b32d2f9f1d7b3e1d5cf",
+      "sourceSelector": {
+        "exact": "Subtracting a fixed offset corrects the reading while preserving the order of observations.",
+        "prefix": "on{Method}\nLet $r$ and $c$ denote the raw and calibrated temperature readings.\n\n",
+        "suffix": "\n\nFor example, the calibration rule $c=r-2$ lowers every raw reading by two degr",
+        "normalizedHash": "a2b916d838bb052842ae4d9914fee2f1f2eaba309c9a2b32d2f9f1d7b3e1d5cf",
+        "previousOffset": 127
+      },
+      "excerptMode": "auto",
+      "excerpt": "Subtracting a fixed offset corrects the reading while preserving the order of observations.",
+      "items": [
+        {
+          "id": "example-thought",
+          "type": "thought",
+          "format": "markdown",
+          "content": "The sentence distinguishes numerical correction from changes in measurement order."
+        },
+        {
+          "id": "example-example",
+          "type": "example",
+          "format": "markdown",
+          "content": "If $r_1<r_2$, then $r_1-2<r_2-2$."
+        },
+        {
+          "id": "example-todo",
+          "type": "todo",
+          "format": "markdown",
+          "content": "Add the assumed temperature unit."
+        }
+      ],
+      "createdAt": "2026-08-05T00:00:00.000Z",
+      "updatedAt": "2026-08-05T00:00:00.000Z",
+      "revision": 0
+    }
+  ]
+}

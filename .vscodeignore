@@ -1,0 +1,16 @@
+.gitignore
+.gitattributes
+.vscode/**
+src/**
+test/**
+example/**
+.github/**
+node_modules/**
+esbuild.mjs
+scripts/**
+tsconfig.json
+package-lock.json
+*.vsix
+*.vsix.sha256
+**/*.map
+dist/integration-suite.js
