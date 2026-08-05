@@ -17,13 +17,20 @@ EXTENSION_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PATH = "/test/webview-harness.html"
 
 
+class ExtensionTestRequestHandler(SimpleHTTPRequestHandler):
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".mjs": "text/javascript",
+    }
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     subprocess.run(["node", "scripts/create-pdf-fixtures.mjs"], cwd=EXTENSION_ROOT, check=True)
     server = None
     server_thread = None
     if "PAPER_NOTES_SMOKE_URL" not in os.environ:
-        handler = partial(SimpleHTTPRequestHandler, directory=EXTENSION_ROOT)
+        handler = partial(ExtensionTestRequestHandler, directory=EXTENSION_ROOT)
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         server.daemon_threads = True
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -64,7 +71,7 @@ def main() -> None:
             assert page.get_by_role("searchbox", name="Search PDF").is_visible()
 
             search = page.get_by_role("searchbox", name="Search PDF")
-            search.fill("coordinate")
+            search.fill("sensor")
             search.press("Enter")
             page.wait_for_timeout(500)
 
