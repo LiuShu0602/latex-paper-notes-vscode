@@ -19,21 +19,21 @@ PDF text-selection annotation is not part of v0.3.x. Create notes from the LaTeX
 ## Requirements
 
 - Windows desktop VS Code 1.114 or newer.
-- TeX Live or MiKTeX with `latexmk`, the selected paper engine, XeLaTeX or LuaLaTeX for notes, `makeindex`, `synctex`, and `kpsewhich`.
+- TeX Live or MiKTeX with the selected paper engine, XeLaTeX or LuaLaTeX for notes, `makeindex`, `synctex`, and `kpsewhich`.
 - TeX packages: `hyperref`, `xr-hyper`, `ctex`, `tcolorbox`, and `imakeidx`.
 
-LaTeX Workshop is optional. The extension has its own build and PDF workflow.
+`latexmk` is recommended but optional. If MiKTeX's `latexmk` cannot start because Perl is unavailable, the built-in builder uses a direct-engine fallback. LaTeX Workshop is optional; the extension has its own build and PDF workflow.
 
 ## Install the VSIX
 
-1. Download `latex-paper-notes-0.3.1.vsix` and its SHA-256 file.
+1. Download `latex-paper-notes-0.3.2.vsix` and its SHA-256 file.
 2. In VS Code, run **Extensions: Install from VSIX...**.
 3. Select the VSIX, then manually run **Developer: Reload Window**.
 
 Command-line alternative:
 
 ```powershell
-code --install-extension .\latex-paper-notes-0.3.1.vsix
+code --install-extension .\latex-paper-notes-0.3.2.vsix
 ```
 
 ## Initialize a paper
@@ -85,6 +85,7 @@ All stored project paths are relative POSIX paths. Absolute paths, `..` escapes,
 ## Diagnostics and recovery
 
 - **Paper Notes Project Diagnostics** checks executables and required TeX packages without installing anything.
+- When TeX Live and MiKTeX are both installed, diagnostics selects one coherent tool directory. The configured engine path is also passed to `latexmk`, and that directory is placed first on the build process `PATH`.
 - **Rescan Managed LaTeX Files** previews changes before accepting newly discovered dependencies. `.fls` discoveries also require confirmation.
 - **Validate Paper Notes Markers** reports incomplete pairs, nesting, overlap, duplicate IDs across files, source-only markers, and orphan JSON records.
 - **Relink Orphan Note to Selection** can use a manual selection or one of at most three confirmed exact/context candidates; fuzzy matches are never applied silently.

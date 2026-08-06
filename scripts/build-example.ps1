@@ -8,19 +8,22 @@ New-Item -ItemType Directory -Force -Path $paperOut, $notesOut, $annotatedOut | 
 
 Push-Location $exampleRoot
 try {
-  & latexmk -pdf -interaction=nonstopmode -file-line-error -halt-on-error -synctex=1 "-outdir=$paperOut" main.tex
-  if ($LASTEXITCODE -ne 0) { throw "Clean example build failed: $LASTEXITCODE" }
-  & latexmk -xelatex -interaction=nonstopmode -file-line-error -halt-on-error -synctex=1 "-outdir=$notesOut" notes/paper_notes.tex
-  if ($LASTEXITCODE -ne 0) { throw "Notes example build failed: $LASTEXITCODE" }
+  function Invoke-TeXPasses([string]$Engine, [string]$OutputDirectory, [string]$RootFile, [string]$Label) {
+    for ($pass = 1; $pass -le 3; $pass++) {
+      & $Engine -interaction=nonstopmode -file-line-error -halt-on-error -synctex=1 -recorder "-output-directory=$OutputDirectory" $RootFile
+      if ($LASTEXITCODE -ne 0) { throw "$Label pass $pass failed: $LASTEXITCODE" }
+    }
+  }
+
+  Invoke-TeXPasses 'pdflatex' $paperOut 'main.tex' 'Clean example build'
+  Invoke-TeXPasses 'xelatex' $notesOut 'notes/paper_notes.tex' 'Notes example build'
   $index = Join-Path $notesOut 'notetypes.idx'
   if (Test-Path -LiteralPath $index) {
     & makeindex -o 'notes/build/notes/notetypes.ind' 'notes/build/notes/notetypes.idx'
     if ($LASTEXITCODE -ne 0) { throw "Example index build failed: $LASTEXITCODE" }
-    & latexmk -xelatex -interaction=nonstopmode -file-line-error -halt-on-error -synctex=1 "-outdir=$notesOut" notes/paper_notes.tex
-    if ($LASTEXITCODE -ne 0) { throw "Notes example rebuild failed: $LASTEXITCODE" }
+    Invoke-TeXPasses 'xelatex' $notesOut 'notes/paper_notes.tex' 'Notes example rebuild'
   }
-  & latexmk -pdf -interaction=nonstopmode -file-line-error -halt-on-error -synctex=1 "-outdir=$annotatedOut" notes/paper_annotated.tex
-  if ($LASTEXITCODE -ne 0) { throw "Annotated example build failed: $LASTEXITCODE" }
+  Invoke-TeXPasses 'pdflatex' $annotatedOut 'notes/paper_annotated.tex' 'Annotated example build'
 } finally {
   Pop-Location
 }

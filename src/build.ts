@@ -5,30 +5,41 @@ import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:
 import * as vscode from 'vscode';
 import type { PaperEngine, PaperNotesProject } from './model.js';
 import { parseFlsInputs, resolveInsideProject } from './project.js';
+import {
+  decodeCommandOutput,
+  latexmkEngineOption,
+  probeFailureReason,
+  probeSuccessSummary,
+  probeSucceeded,
+  resolveToolset,
+  runProcessProbe,
+  runToolProbe,
+  toolchainProcessEnvironment,
+  type TeXDistribution,
+  type ToolExecutables,
+  type ToolName
+} from './toolchain.js';
+
+export type { ToolExecutables } from './toolchain.js';
 
 export type BuildKind = 'quick' | 'full';
 
-export interface ToolExecutables {
-  latexmk: string;
-  pdflatex: string;
-  xelatex: string;
-  lualatex: string;
-  makeindex: string;
-  synctex: string;
-  kpsewhich: string;
-}
-
 export interface ToolCheck {
-  name: keyof ToolExecutables | `package:${string}`;
+  name: ToolName | `package:${string}` | 'toolchain:paths';
   executable?: string;
   ok: boolean;
+  required: boolean;
   detail: string;
 }
 
 export interface ToolchainReport {
-  distribution: 'TeX Live' | 'MiKTeX' | 'unknown';
+  distribution: TeXDistribution;
+  distributionDetail: string;
   checks: ToolCheck[];
   ready: boolean;
+  driver: 'latexmk' | 'direct';
+  executables: ToolExecutables;
+  warnings: string[];
 }
 
 export interface BuildResult {
@@ -54,40 +65,70 @@ export class BuildManager implements vscode.Disposable {
   }
 
   async diagnose(): Promise<ToolchainReport> {
-    const tools = this.executables();
+    const configured = this.executables();
     const project = this.project();
-    const required = new Set<keyof ToolExecutables>([
-      'latexmk', project.paperEngine, project.notesEngine, 'makeindex', 'synctex', 'kpsewhich'
-    ]);
+    const required = [...new Set<ToolName>([
+      project.paperEngine, project.notesEngine, 'makeindex', 'synctex', 'kpsewhich'
+    ])];
+    const selection = await resolveToolset(configured, required, this.workspaceRoot);
+    const tools = selection.executables;
     const checks: ToolCheck[] = [];
-    let distribution: ToolchainReport['distribution'] = 'unknown';
-    for (const name of required) {
+    let distribution: ToolchainReport['distribution'] = selection.distribution;
+    checks.push({
+      name: 'toolchain:paths',
+      ok: selection.coherent,
+      required: true,
+      detail: selection.coherenceDetail
+    });
+    const probeOrder = ['latexmk', ...required] as ToolName[];
+    for (const name of probeOrder) {
       const executable = tools[name];
-      const result = await runProbe(executable, ['--version'], this.workspaceRoot);
+      const result = await runToolProbe(name, executable, this.workspaceRoot);
       const combined = `${result.stdout}\n${result.stderr}`;
-      if (/MiKTeX/i.test(combined)) {
-        distribution = 'MiKTeX';
-      } else if (/TeX Live|kpathsea/i.test(combined) && distribution === 'unknown') {
-        distribution = 'TeX Live';
+      if (distribution === 'unknown') {
+        if (/MiKTeX/i.test(combined)) {
+          distribution = 'MiKTeX';
+        } else if (/TeX Live|kpathsea/i.test(combined)) {
+          distribution = 'TeX Live';
+        }
       }
       checks.push({
         name,
         executable,
-        ok: result.code === 0,
-        detail: result.code === 0 ? firstUsefulLine(combined) : executableHint(name, distribution, result.error)
+        ok: probeSucceeded(name, result),
+        required: name !== 'latexmk',
+        detail: probeSucceeded(name, result)
+          ? `${probeSuccessSummary(name, result)} — ${executable}`
+          : executableHint(name, distribution, probeFailureReason(name, result), executable)
       });
     }
     const packages = ['hyperref.sty', 'xr-hyper.sty', 'ctexart.cls', 'tcolorbox.sty', 'imakeidx.sty'];
+    const kpsewhichReady = checks.find((check) => check.name === 'kpsewhich')?.ok === true;
     for (const packageName of packages) {
-      const result = await runProbe(tools.kpsewhich, [packageName], this.workspaceRoot);
+      const result = kpsewhichReady
+        ? await runProcessProbe(tools.kpsewhich, [packageName], this.workspaceRoot)
+        : { code: null, stdout: '', stderr: '', error: 'kpsewhich is unavailable' };
       checks.push({
         name: `package:${packageName}`,
         executable: tools.kpsewhich,
         ok: result.code === 0 && Boolean(result.stdout.trim()),
+        required: true,
         detail: result.stdout.trim() || packageHint(packageName, distribution)
       });
     }
-    return { distribution, checks, ready: checks.every((check) => check.ok) };
+    const latexmkReady = checks.find((check) => check.name === 'latexmk')?.ok === true;
+    const warnings = latexmkReady ? [] : [
+      'latexmk is optional and is not usable on this computer. The extension will use its Perl-free direct-engine fallback; complex bibliography or glossary workflows may still require a working latexmk.'
+    ];
+    return {
+      distribution,
+      distributionDetail: selection.distributionDetail,
+      checks,
+      ready: checks.filter((check) => check.required).every((check) => check.ok),
+      driver: latexmkReady ? 'latexmk' : 'direct',
+      executables: tools,
+      warnings
+    };
   }
 
   async run(kind: BuildKind): Promise<boolean> {
@@ -127,6 +168,9 @@ export class BuildManager implements vscode.Disposable {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           this.output.appendLine(`\nERROR: ${message}`);
+          if (process.env.PAPER_NOTES_TEST_LOG === '1') {
+            console.error(`[LaTeX Paper Notes] ERROR: ${message}`);
+          }
           if (!this.cancelled) {
             void vscode.window.showErrorMessage(`Paper Notes build failed: ${message}`);
           }
@@ -156,12 +200,16 @@ export class BuildManager implements vscode.Disposable {
   private async runBuiltin(project: PaperNotesProject): Promise<BuildResult> {
     const report = await this.diagnose();
     for (const check of report.checks) {
-      this.output.appendLine(`${check.ok ? '[OK]' : '[MISSING]'} ${check.name}: ${check.detail}`);
+      const status = check.ok ? '[OK]' : check.required ? '[MISSING]' : '[OPTIONAL]';
+      this.output.appendLine(`${status} ${check.name}: ${check.detail}`);
+    }
+    for (const warning of report.warnings) {
+      this.output.appendLine(`[WARNING] ${warning}`);
     }
     if (!report.ready) {
-      throw new Error(`The LaTeX toolchain is incomplete (${report.distribution}). Run “Paper Notes: Project Diagnostics” for installation hints.`);
+      throw new Error(`The LaTeX toolchain is incomplete (${report.distributionDetail}). Run “Paper Notes: Project Diagnostics” for installation hints.`);
     }
-    const tools = this.executables();
+    const tools = report.executables;
     const notesDir = await resolveInsideProject(this.workspaceRoot, project.notesDir, true);
     const buildRoot = resolve(notesDir, 'build');
     const paperOut = resolve(buildRoot, 'paper');
@@ -170,7 +218,7 @@ export class BuildManager implements vscode.Disposable {
     await Promise.all([paperOut, notesOut, annotatedOut].map((path) => mkdir(path, { recursive: true })));
 
     this.output.appendLine('\n[1/4] Clean paper and dependency recorder');
-    const paper = await this.runLatexmk(project.paperEngine, project.rootFile, paperOut, tools);
+    const paper = await this.runDocument(project.paperEngine, project.rootFile, paperOut, tools, report.driver);
     if (!paper) {
       return { ok: false, flsInputs: [] };
     }
@@ -182,7 +230,7 @@ export class BuildManager implements vscode.Disposable {
 
     this.output.appendLine('\n[2/4] Standalone notes PDF and note-type index');
     const notesRoot = `${project.notesDir}/paper_notes.tex`;
-    if (!(await this.runLatexmk(project.notesEngine, notesRoot, notesOut, tools))) {
+    if (!(await this.runDocument(project.notesEngine, notesRoot, notesOut, tools, report.driver))) {
       return { ok: false, flsInputs };
     }
     const indexPath = resolve(notesOut, 'notetypes.idx');
@@ -191,13 +239,13 @@ export class BuildManager implements vscode.Disposable {
         '-o', relative(this.workspaceRoot, resolve(notesOut, 'notetypes.ind')).replace(/\\/g, '/'),
         relative(this.workspaceRoot, indexPath).replace(/\\/g, '/')
       ]);
-      if (indexRun.code !== 0 || !(await this.runLatexmk(project.notesEngine, notesRoot, notesOut, tools))) {
+      if (indexRun.code !== 0 || !(await this.runDocument(project.notesEngine, notesRoot, notesOut, tools, report.driver))) {
         return { ok: false, flsInputs };
       }
     }
 
     this.output.appendLine('\n[3/4] Annotated paper');
-    if (!(await this.runLatexmk(project.paperEngine, project.annotatedWrapper, annotatedOut, tools))) {
+    if (!(await this.runDocument(project.paperEngine, project.annotatedWrapper, annotatedOut, tools, report.driver))) {
       return { ok: false, flsInputs };
     }
 
@@ -220,18 +268,54 @@ export class BuildManager implements vscode.Disposable {
     return { ok: true, flsInputs };
   }
 
-  private async runLatexmk(engine: PaperEngine, root: string, output: string, tools: ToolExecutables): Promise<boolean> {
+  private async runDocument(
+    engine: PaperEngine,
+    root: string,
+    output: string,
+    tools: ToolExecutables,
+    driver: ToolchainReport['driver']
+  ): Promise<boolean> {
+    if (driver === 'direct') {
+      return this.runDirectEngine(engine, root, output, tools);
+    }
     const mode = engine === 'pdflatex' ? '-pdf' : engine === 'xelatex' ? '-xelatex' : '-lualatex';
     const run = await this.spawnLogged(tools.latexmk, [
       mode,
+      latexmkEngineOption(engine, tools[engine]),
       '-interaction=nonstopmode',
       '-file-line-error',
       '-halt-on-error',
       '-synctex=1',
       `-outdir=${output}`,
       root
-    ]);
+    ], toolchainProcessEnvironment(tools, engine));
     return run.code === 0;
+  }
+
+  private async runDirectEngine(
+    engine: PaperEngine,
+    root: string,
+    output: string,
+    tools: ToolExecutables
+  ): Promise<boolean> {
+    this.output.appendLine(`latexmk fallback: running ${engine} directly (3 passes).`);
+    const args = [
+      '-interaction=nonstopmode',
+      '-file-line-error',
+      '-halt-on-error',
+      '-synctex=1',
+      '-recorder',
+      `-output-directory=${output}`,
+      root
+    ];
+    for (let pass = 1; pass <= 3; pass += 1) {
+      this.output.appendLine(`Direct-engine pass ${pass}/3`);
+      const run = await this.spawnLogged(tools[engine], args, toolchainProcessEnvironment(tools, engine));
+      if (run.code !== 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private async validateLogs(directories: string[]): Promise<void> {
@@ -255,18 +339,29 @@ export class BuildManager implements vscode.Disposable {
     }
   }
 
-  private async spawnLogged(executable: string, args: string[]): Promise<{ code: number | null; lines: string[] }> {
+  private async spawnLogged(
+    executable: string,
+    args: string[],
+    env: NodeJS.ProcessEnv = process.env
+  ): Promise<{ code: number | null; lines: string[] }> {
     this.output.appendLine(`> ${quoteCommand(executable, args)}`);
     const child = spawn(executable, args, {
       cwd: this.workspaceRoot,
       windowsHide: true,
       shell: false,
-      env: { ...process.env, max_print_line: '1000' }
+      env: { ...env, max_print_line: '1000' }
     });
     this.child = child;
     const lines: string[] = [];
-    const stdout = new LineDecoder((line) => { this.output.appendLine(line); lines.push(line); });
-    const stderr = new LineDecoder((line) => { this.output.appendLine(line); lines.push(line); });
+    const record = (line: string): void => {
+      this.output.appendLine(line);
+      lines.push(line);
+      if (process.env.PAPER_NOTES_TEST_LOG === '1') {
+        console.error(`[LaTeX Paper Notes] ${line}`);
+      }
+    };
+    const stdout = new LineDecoder(record);
+    const stderr = new LineDecoder(record);
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
     const code = await new Promise<number | null>((resolveExit, reject) => {
@@ -362,35 +457,7 @@ class LineDecoder {
 }
 
 export function decodeBuildOutput(buffer: Buffer): string {
-  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-  const replacementRatio = (utf8.match(/\uFFFD/g) ?? []).length / Math.max(1, utf8.length);
-  if (replacementRatio < 0.005) {
-    return utf8;
-  }
-  try {
-    return new TextDecoder('gbk', { fatal: false }).decode(buffer);
-  } catch {
-    return utf8;
-  }
-}
-
-async function runProbe(executable: string, args: string[], cwd: string): Promise<{ code: number | null; stdout: string; stderr: string; error?: string }> {
-  return new Promise((resolveProbe) => {
-    let stdout = Buffer.alloc(0);
-    let stderr = Buffer.alloc(0);
-    let settled = false;
-    const child = spawn(executable, args, { cwd, windowsHide: true, shell: false });
-    const finish = (value: { code: number | null; stdout: string; stderr: string; error?: string }): void => {
-      if (!settled) {
-        settled = true;
-        resolveProbe(value);
-      }
-    };
-    child.stdout.on('data', (chunk: Buffer) => { stdout = Buffer.concat([stdout, chunk]); });
-    child.stderr.on('data', (chunk: Buffer) => { stderr = Buffer.concat([stderr, chunk]); });
-    child.once('error', (error) => finish({ code: null, stdout: '', stderr: '', error: error.message }));
-    child.once('close', (code) => finish({ code, stdout: decodeBuildOutput(stdout), stderr: decodeBuildOutput(stderr) }));
-  });
+  return decodeCommandOutput(buffer);
 }
 
 async function atomicCopy(source: string, target: string): Promise<void> {
@@ -422,13 +489,18 @@ function quoteCommand(executable: string, args: string[]): string {
   return [executable, ...args].map((value) => /\s/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value).join(' ');
 }
 
-function firstUsefulLine(value: string): string {
-  return value.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? 'available';
-}
-
-function executableHint(name: keyof ToolExecutables, distribution: ToolchainReport['distribution'], error?: string): string {
+function executableHint(
+  name: ToolName,
+  distribution: ToolchainReport['distribution'],
+  reason: string | undefined,
+  executable: string
+): string {
+  if (name === 'latexmk') {
+    const suffix = reason ? `: ${reason}` : '';
+    return `Optional latexmk is not usable${suffix}. The extension will fall back to direct ${distribution === 'unknown' ? 'LaTeX' : distribution} engine runs without Perl. Resolved path: ${executable}`;
+  }
   const manager = distribution === 'MiKTeX' ? 'MiKTeX Console' : 'TeX Live Manager (tlmgr)';
-  return `${name} was not found${error ? `: ${error}` : ''}. Install/enable it with ${manager}, then configure paperNotes.${name}Executable if it is not on PATH.`;
+  return `${name} is not usable${reason ? `: ${reason}` : ''}. Install/enable it with ${manager}, then configure paperNotes.${name}Executable if it is not on PATH. Resolved path: ${executable}`;
 }
 
 function packageHint(packageName: string, distribution: ToolchainReport['distribution']): string {

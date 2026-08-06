@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import * as vscode from 'vscode';
 
@@ -34,4 +34,18 @@ export async function run(): Promise<void> {
   assert.equal(data.schemaVersion, 3);
   assert.deepEqual(data.project?.sourceFiles, ['main.tex', 'sections/introduction.tex', 'sections/method.tex']);
   assert.ok(data.notes?.some((note) => note.id === 'method:offset-correction' && note.sourceFile === 'sections/method.tex'));
+
+  if (process.env.PAPER_NOTES_DIRECT_BUILD === '1') {
+    const configuration = vscode.workspace.getConfiguration('paperNotes', folder.uri);
+    await configuration.update('latexmkExecutable', '__paper_notes_missing_latexmk__', vscode.ConfigurationTarget.Global);
+    try {
+      // The configuration listener rebuilds the per-folder controller.
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+      await vscode.commands.executeCommand('paperNotes.fullBuild');
+      await access(resolve(folder.uri.fsPath, 'notes', 'paper_notes.pdf'));
+      await access(resolve(folder.uri.fsPath, 'notes', 'paper_annotated.pdf'));
+    } finally {
+      await configuration.update('latexmkExecutable', undefined, vscode.ConfigurationTarget.Global);
+    }
+  }
 }

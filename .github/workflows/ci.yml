@@ -46,8 +46,13 @@ jobs:
           refreshenv
           initexmf --admin --update-fndb
           mpm --admin --update-db
-          mpm --admin --install=latexmk,ctex,tcolorbox,imakeidx,xr-hyper
+          mpm --admin --install=ctex,tcolorbox,imakeidx,xr-hyper
       - run: npm ci
+      - name: Exercise the built-in build without latexmk or Perl
+        shell: powershell
+        run: |
+          $env:PAPER_NOTES_DIRECT_BUILD = '1'
+          npm run test:integration
       - name: Build the sanitized multi-file example
         shell: powershell
         run: |

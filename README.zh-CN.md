@@ -19,21 +19,21 @@ v0.3.x 暂不支持直接在 PDF 选中文字添加笔记，请从 LaTeX 源码�
 ## 环境要求
 
 - Windows 桌面版 VS Code 1.114 及以上。
-- TeX Live 或 MiKTeX，并具备 `latexmk`、所选论文引擎、XeLaTeX 或 LuaLaTeX、`makeindex`、`synctex`、`kpsewhich`。
+- TeX Live 或 MiKTeX，并具备所选论文引擎、用于笔记的 XeLaTeX 或 LuaLaTeX、`makeindex`、`synctex`、`kpsewhich`。
 - TeX 包：`hyperref`、`xr-hyper`、`ctex`、`tcolorbox`、`imakeidx`。
 
-LaTeX Workshop 只是可选推荐项，不是硬依赖。
+`latexmk` 建议安装但不再是硬依赖；如果 MiKTeX 的 `latexmk` 因缺少 Perl 无法启动，内置构建器会自动改用 LaTeX 引擎直接构建。LaTeX Workshop 也只是可选推荐项。
 
 ## 安装
 
-1. 获取 `latex-paper-notes-0.3.1.vsix` 和 SHA-256 文件。
+1. 获取 `latex-paper-notes-0.3.2.vsix` 和 SHA-256 文件。
 2. 在 VS Code 执行“Extensions: Install from VSIX...”并选择 VSIX。
 3. 安装后由你手动执行一次“Developer: Reload Window”。
 
 也可执行：
 
 ```powershell
-code --install-extension .\latex-paper-notes-0.3.1.vsix
+code --install-extension .\latex-paper-notes-0.3.2.vsix
 ```
 
 ## 一键初始化
@@ -83,6 +83,7 @@ Selected paper text.
 所有项目路径必须是项目内的相对 POSIX 路径；绝对路径、`..` 越界和解析到工作区外的符号链接会被拒绝。机器上的可执行文件位置只保存在 VS Code 用户设置。
 
 - “论文笔记项目诊断”：只检查工具和 TeX 包，不自动安装。
+- 同时安装 TeX Live 与 MiKTeX 时，诊断会选择一套完整且一致的工具目录；正式构建也会把配置的引擎路径明确传给 `latexmk`，并将该目录置于构建子进程 `PATH` 最前面。
 - “重新扫描受管 LaTeX 文件”：确认后才接受新依赖；`.fls` 新发现也必须确认。
 - “验证论文笔记标记”：检查缺端、嵌套、重叠、跨文件重复 ID、孤立标记和孤立 JSON。
 - “重新关联孤立笔记”：可用手工选区或最多三个候选；模糊候选绝不静默采用。

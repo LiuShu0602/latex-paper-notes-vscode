@@ -47,10 +47,12 @@ The clean paper must have exactly the same visible pixels before and after initi
 async function compile(root: string, outputName: string): Promise<void> {
   const output = join(root, outputName);
   await mkdir(output, { recursive: true });
-  run('latexmk', [
-    '-pdf', '-interaction=nonstopmode', '-file-line-error', '-halt-on-error',
-    `-outdir=${output}`, 'main.tex'
-  ], root);
+  for (let pass = 1; pass <= 3; pass += 1) {
+    run('pdflatex', [
+      '-interaction=nonstopmode', '-file-line-error', '-halt-on-error', '-recorder',
+      `-output-directory=${output}`, 'main.tex'
+    ], root);
+  }
 }
 
 function run(executable: string, args: string[], cwd: string): void {

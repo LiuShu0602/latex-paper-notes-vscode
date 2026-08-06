@@ -2,7 +2,7 @@
   "name": "latex-paper-notes",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "latex-paper-notes",
   "license": "MIT",
   "repository": {
@@ -238,7 +238,7 @@
     "test:integration": "npm run build && node --import tsx test/integration/run.ts",
     "test:latex-render": "node --import tsx scripts/check-clean-render.ts",
     "test:all": "npm run check && npm run test && npm run build && npm run test:webview",
-    "package": "npm run test:all && vsce package --no-dependencies --no-rewrite-relative-links && node scripts/audit-vsix.mjs latex-paper-notes-0.3.1.vsix"
+    "package": "npm run test:all && vsce package --no-dependencies --no-rewrite-relative-links && node scripts/audit-vsix.mjs latex-paper-notes-0.3.2.vsix"
   },
   "dependencies": {
     "katex": "^0.16.22",

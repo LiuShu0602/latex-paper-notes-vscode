@@ -165,7 +165,7 @@ export function upsertIntegrationBlock(source: string, block: string): string {
 
 export function renderPaperIntegrationPackage(project: PaperNotesProject): string {
   return String.raw`\NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{${project.notesDir}/paper-notes-paper}[2026/08/06 v0.3.1 LaTeX Paper Notes integration]
+\ProvidesPackage{${project.notesDir}/paper-notes-paper}[2026/08/06 v0.3.2 LaTeX Paper Notes integration]
 \RequirePackage{xcolor}
 \ifdefined\PaperNotesDraft
   \RequirePackage{xr-hyper}
@@ -228,7 +228,7 @@ export function renderNotesRoot(project: PaperNotesProject): string {
 
 export function renderNotesStylePackage(notesDir = 'notes'): string {
   return String.raw`\NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{${notesDir}/paper-notes-style}[2026/08/06 v0.3.1 Companion paper notes]
+\ProvidesPackage{${notesDir}/paper-notes-style}[2026/08/06 v0.3.2 Companion paper notes]
 \RequirePackage{etoolbox}
 \RequirePackage{xparse}
 \RequirePackage[most]{tcolorbox}

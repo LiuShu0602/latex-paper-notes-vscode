@@ -216,7 +216,7 @@ class PaperNotesApplication implements vscode.Disposable {
     );
     try {
       const report = await manager.diagnose();
-      await showToolchainReport(report.distribution, report.checks);
+      await showToolchainReport(report.distributionDetail, report.checks);
     } finally {
       manager.dispose();
     }
@@ -871,7 +871,7 @@ class PaperNotesController implements vscode.Disposable, PanelActions {
 
   async projectDoctor(): Promise<void> {
     const report = await this.buildManager.diagnose();
-    await showToolchainReport(report.distribution, report.checks, this.store.project.sourceFiles);
+    await showToolchainReport(report.distributionDetail, report.checks, this.store.project.sourceFiles);
   }
 
   private async afterBuild(_kind: BuildKind, result: BuildResult): Promise<void> {
@@ -1107,7 +1107,7 @@ async function chooseRootFile(folder: vscode.WorkspaceFolder): Promise<string | 
 
 async function showToolchainReport(
   distribution: string,
-  checks: Array<{ name: string; ok: boolean; detail: string }>,
+  checks: Array<{ name: string; ok: boolean; required?: boolean; detail: string }>,
   sources: string[] = []
 ): Promise<void> {
   const document = await vscode.workspace.openTextDocument({
@@ -1117,7 +1117,7 @@ async function showToolchainReport(
       '',
       `Detected distribution: **${distribution}**`,
       '',
-      ...checks.map((check) => `- ${check.ok ? '✅' : '❌'} **${check.name}** — ${check.detail}`),
+      ...checks.map((check) => `- ${check.ok ? '✅' : check.required === false ? '⚠️' : '❌'} **${check.name}** — ${check.detail}`),
       ...(sources.length ? ['', '## Managed source files', '', ...sources.map((file) => `- \`${file}\``)] : []),
       '',
       'No package was installed and no network request was made.'
