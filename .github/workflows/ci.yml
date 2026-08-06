@@ -63,11 +63,13 @@ jobs:
           }
           Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
           refreshenv
+          $miktexBin = Split-Path -Parent (Get-Command initexmf -ErrorAction Stop).Source
+          $miktexBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           initexmf --admin --update-fndb
           if ($LASTEXITCODE -ne 0) { throw "initexmf failed with exit code $LASTEXITCODE" }
           mpm --admin --update-db
           if ($LASTEXITCODE -ne 0) { throw "mpm database update failed with exit code $LASTEXITCODE" }
-          $packages = @('ctex', 'tcolorbox', 'imakeidx', 'xr-hyper')
+          $packages = @('ctex', 'tcolorbox', 'imakeidx', 'hyperref')
           foreach ($packageName in $packages) {
             mpm --admin "--install=$packageName"
             if ($LASTEXITCODE -ne 0) {
