@@ -46,8 +46,8 @@ export async function inspectProjectStyle(
       kind: 'compatible', compatible: true, installedVersion, expectedVersion: PROJECT_STYLE_VERSION,
       actualHash, templateHash, relativePath,
       detail: verifyEmbeddedTemplateHash(content)
-        ? 'Project style matches the v0.4 template.'
-        : 'Project style is v0.4-compatible and contains local modifications.'
+        ? `Project style matches the v${PROJECT_STYLE_VERSION} template.`
+        : `Project style is v${PROJECT_STYLE_VERSION}-compatible and contains local modifications.`
     };
   }
   const stockVersion = knownStockVersion(content, project.notesDir);
@@ -128,7 +128,11 @@ export function verifyEmbeddedTemplateHash(content: string): boolean {
 
 function knownStockVersion(content: string, notesDir: string): string | undefined {
   const installedVersion = extractStyleVersion(content);
-  if (installedVersion && /^0\.4\.0-beta\.\d+$/.test(installedVersion) && verifyEmbeddedTemplateHash(content)) {
+  if (
+    installedVersion
+    && (installedVersion === '0.4.0' || /^0\.4\.0-beta\.\d+$/.test(installedVersion))
+    && verifyEmbeddedTemplateHash(content)
+  ) {
     return installedVersion;
   }
   const normalized = normalizeNewlines(content);

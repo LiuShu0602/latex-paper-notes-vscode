@@ -26,14 +26,14 @@ Translation is manual-only: the extension makes no translation request. Custom n
 
 ## Install the VSIX
 
-1. Download `latex-paper-notes-0.4.0.vsix` and its SHA-256 file.
+1. Download `latex-paper-notes-0.4.1.vsix` and its SHA-256 file.
 2. In VS Code, run **Extensions: Install from VSIX...**.
 3. Select the VSIX, then manually run **Developer: Reload Window**.
 
 Command-line alternative:
 
 ```powershell
-code --install-extension .\latex-paper-notes-0.4.0.vsix
+code --install-extension .\latex-paper-notes-0.4.1.vsix
 ```
 
 ## Initialize a paper

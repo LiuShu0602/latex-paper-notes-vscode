@@ -1,5 +1,13 @@
 # Migration
 
+## From v0.4.0 to v0.4.1
+
+1. Install the v0.4.1 VSIX and manually run **Developer: Reload Window**.
+2. Open the paper project. An untouched public v0.4.0 style is backed up and upgraded automatically; a locally modified style remains protected.
+3. Run a quick or full build. If validation fails, the extension now states that the PDF tabs still contain the last successful build rather than newly generated output.
+
+This patch does not change schema v4, note IDs, content, source markers, or PDF destination names. It corrects document routing for projects whose notes use both `main` and `supp` sources.
+
 ## From v0.3.x or v0.4.0 beta to v0.4.0
 
 1. Commit or back up the paper project, then install the v0.4.0 VSIX and manually run **Developer: Reload Window**.

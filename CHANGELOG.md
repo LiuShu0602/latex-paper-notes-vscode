@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Fixed standalone note links so the `PaperNote` document argument selects `main-` or `supp-` targets instead of always using `main-`.
+- Upgraded untouched v0.4.0 project styles automatically while preserving locally modified styles.
+- Made failed builds state explicitly that published PDF tabs still show the last successful build.
+
 ## 0.4.0
 
 - Promoted extensible Translation and custom annotation types to the stable release after 55 unit tests, VS Code integration tests, light/dark/high-contrast browser tests, and full TeX Live example builds.
