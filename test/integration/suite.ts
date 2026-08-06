@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import * as vscode from 'vscode';
 
@@ -38,13 +38,22 @@ export async function run(): Promise<void> {
 
   if (process.env.PAPER_NOTES_DIRECT_BUILD === '1') {
     const configuration = vscode.workspace.getConfiguration('paperNotes', folder.uri);
+    const notesPdf = resolve(folder.uri.fsPath, 'notes', 'paper_notes.pdf');
+    const annotatedPdf = resolve(folder.uri.fsPath, 'notes', 'paper_annotated.pdf');
+    await Promise.all([
+      rm(notesPdf, { force: true }),
+      rm(annotatedPdf, { force: true }),
+      rm(`${notesPdf.slice(0, -4)}.synctex.gz`, { force: true }),
+      rm(`${annotatedPdf.slice(0, -4)}.synctex.gz`, { force: true })
+    ]);
     await configuration.update('latexmkExecutable', '__paper_notes_missing_latexmk__', vscode.ConfigurationTarget.Global);
     try {
       // The configuration listener rebuilds the per-folder controller.
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
-      await vscode.commands.executeCommand('paperNotes.fullBuild');
-      await access(resolve(folder.uri.fsPath, 'notes', 'paper_notes.pdf'));
-      await access(resolve(folder.uri.fsPath, 'notes', 'paper_annotated.pdf'));
+      const built = await vscode.commands.executeCommand<boolean>('paperNotes.fullBuild');
+      assert.equal(built, true, 'The built-in direct-engine build reported failure.');
+      await access(notesPdf);
+      await access(annotatedPdf);
     } finally {
       await configuration.update('latexmkExecutable', undefined, vscode.ConfigurationTarget.Global);
     }
