@@ -21,6 +21,10 @@ try {
   if (Test-Path -LiteralPath $index) {
     & makeindex -o 'notes/build/notes/notetypes.ind' 'notes/build/notes/notetypes.idx'
     if ($LASTEXITCODE -ne 0) { throw "Example index build failed: $LASTEXITCODE" }
+    $indexOutput = Get-Content -LiteralPath 'notes/build/notes/notetypes.ind' -Raw -Encoding UTF8
+    if ($indexOutput -notmatch 'Translation / 翻译') { throw 'Translation type is missing from the example index.' }
+    if ($indexOutput -notmatch 'Custom / 自定义') { throw 'Custom type is missing from the example index.' }
+    if ($indexOutput -match 'hyperxindexformat') { throw 'A custom type name corrupted makeindex syntax.' }
     Invoke-TeXPasses 'xelatex' $notesOut 'notes/paper_notes.tex' 'Notes example rebuild'
   }
   Invoke-TeXPasses 'pdflatex' $annotatedOut 'notes/paper_annotated.tex' 'Annotated example build'
