@@ -38,3 +38,33 @@ test('synchronizes an auto excerpt and emits deterministic generated TeX', () =>
   assert.doesNotMatch(generated.tex, /\\SourceExcerpt\{[^}]*\\par/);
   assert.match(generated.tex, /这里有 \$x_i\$/);
 });
+
+test('emits translation and custom type declarations without altering legacy LaTeX bodies', () => {
+  const source = String.raw`\documentclass{article}
+\begin{document}\PaperNoteBegin{body:types}Text.\PaperNoteEnd{body:types}\end{document}`;
+  const data = createEmptyData();
+  const customId = '11111111-1111-4111-8111-111111111111';
+  data.customTypes.push({
+    id: customId,
+    name: 'Key idea ! @ | "',
+    color: '#FFE66D',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z'
+  });
+  data.notes.push({
+    id: 'body:types', documentId: 'main', sourceFile: 'main.tex', title: 'Types', sectionTitle: 'Body',
+    sourceSnapshot: 'Text.', sourceHash: hashText('Text.'),
+    sourceSelector: { exact: 'Text.', prefix: '', suffix: '', normalizedHash: hashText('Text.'), previousOffset: 0 },
+    excerptMode: 'auto', excerpt: 'Text.',
+    items: [
+      { id: 'translation', type: 'translation', format: 'markdown', content: '手工译文。' },
+      { id: 'custom', type: 'custom', customTypeId: customId, format: 'latex-legacy', content: String.raw`\begin{quote}Keep \alpha exactly.\end{quote}` }
+    ],
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
+  });
+  const generated = synchronizeAndGenerate(data, source);
+  assert.match(generated.tex, /\\DeclarePaperNoteCustomType\{11111111-1111-4111-8111-111111111111\}/);
+  assert.match(generated.tex, /\\NoteItem\{translation\}/);
+  assert.match(generated.tex, /\\CustomNoteItem\{11111111-1111-4111-8111-111111111111\}/);
+  assert.match(generated.tex, /\\begin\{quote\}Keep \\alpha exactly\.\\end\{quote\}/);
+});

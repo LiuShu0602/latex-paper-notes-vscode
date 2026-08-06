@@ -3,7 +3,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { applyInitializationPlan, planInitialization, INTEGRATION_BEGIN } from '../src/initializer.js';
+import { applyInitializationPlan, planInitialization, INTEGRATION_BEGIN, PROJECT_STYLE_VERSION } from '../src/initializer.js';
+import { verifyEmbeddedTemplateHash } from '../src/style-upgrade.js';
+import { generatedHash } from '../src/generator.js';
+import { hashText } from '../src/model.js';
 import { discoverSourceGraph } from '../src/project.js';
 
 test('initialization previews and applies an idempotent removable integration', async (t) => {
@@ -21,6 +24,15 @@ test('initialization previews and applies an idempotent removable integration', 
   assert.match(integrated, new RegExp(INTEGRATION_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(integrated, /\\IfFileExists\{notes\/paper-notes-paper\.sty\}/);
   assert.equal(await readFile(join(root, 'main.tex.paper-notes.bak'), 'utf8'), clean);
+  const data = JSON.parse(await readFile(join(root, 'notes', 'paper-notes.json'), 'utf8')) as { schemaVersion: number; customTypes: unknown[] };
+  assert.equal(data.schemaVersion, 4);
+  assert.deepEqual(data.customTypes, []);
+  const style = await readFile(join(root, 'notes', 'paper-notes-style.sty'), 'utf8');
+  assert.match(style, new RegExp(`project-style-version: ${PROJECT_STYLE_VERSION.replace(/\./g, '\\.')}`));
+  assert.equal(verifyEmbeddedTemplateHash(style), true);
+  const jsonText = await readFile(join(root, 'notes', 'paper-notes.json'), 'utf8');
+  const generated = await readFile(join(root, 'notes', 'main_notes.tex'), 'utf8');
+  assert.equal(generatedHash(generated), hashText(jsonText));
 
   const second = await planInitialization(root, {
     rootFile: 'main.tex', sourceGraph: graph, paperEngine: 'pdflatex', notesEngine: 'xelatex'

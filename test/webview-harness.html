@@ -3,10 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    if (new URLSearchParams(location.search).get('theme') === 'dark') {
+      const root = document.documentElement;
+      root.style.setProperty('--vscode-foreground', '#F2F2F7');
+      root.style.setProperty('--vscode-descriptionForeground', '#A1A1A6');
+      root.style.setProperty('--vscode-editor-background', '#1E1E1E');
+      root.style.setProperty('--vscode-sideBar-background', '#181818');
+    }
+  </script>
   <link rel="stylesheet" href="../dist/webview.css">
   <title>Paper Notes Webview Harness</title>
 </head>
 <body>
+  <script>
+    if (new URLSearchParams(location.search).get('theme') === 'dark') {
+      document.body.classList.add('vscode-dark');
+    }
+  </script>
   <div id="app"></div>
   <script>
     (() => {
@@ -25,6 +39,13 @@
                 type: 'state',
                 tab: 'annotatedPdf',
                 currentId: noteId,
+                customTypes: [{
+                  id: '11111111-1111-4111-8111-111111111111',
+                  name: 'Definition',
+                  color: '#7A63B8',
+                  createdAt: '2026-08-05T00:00:00.000Z',
+                  updatedAt: '2026-08-05T00:00:00.000Z'
+                }],
                 notes: [{
                   id: noteId,
                   documentId: 'main',
@@ -54,6 +75,12 @@
                 workerUri: `${base}/dist/pdf.worker.min.mjs`,
                 locale: 'en',
                 project: { rootFile: 'main.tex', sourceFiles: ['main.tex', 'sections/method.tex'], notesDir: 'notes' },
+                projectStatus: {
+                  extensionVersion: '0.4.0-beta.2', schemaVersion: 4,
+                  styleVersion: '0.4.0-beta.1', expectedStyleVersion: '0.4.0-beta.1',
+                  styleCompatible: true, styleKind: 'compatible', styleDetail: 'Project style matches the v0.4 template.',
+                  buildMode: 'builtin'
+                },
                 assetBaseUri: `${base}/example/notes/`
               }
             })));

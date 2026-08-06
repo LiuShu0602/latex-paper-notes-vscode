@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { applyInitializationPlan, planInitialization } from '../src/initializer.js';
-import { hashText, type PaperNote } from '../src/model.js';
+import { createEmptyData, hashText, type PaperNote } from '../src/model.js';
 import { scanMarkers } from '../src/markers.js';
 import { discoverSourceGraph } from '../src/project.js';
 import { buildSourceSelector } from '../src/source-selector.js';
@@ -44,5 +44,37 @@ test('serializes note writes, rejects stale revisions, and retains last-good fil
   assert.equal(store.data.notes[0]?.items[0]?.content, 'newest');
   assert.equal(JSON.parse(await readFile(join(root, 'notes', 'paper-notes.json'), 'utf8')).notes[0].items[0].content, 'newest');
   assert.ok((await readFile(join(root, 'notes', 'paper-notes.json.last-good'), 'utf8')).includes('first'));
+  const customTypeId = '11111111-1111-4111-8111-111111111111';
+  await store.addCustomType({
+    id: customTypeId, name: 'Definition', color: '#6A67CE',
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
+  });
+  const customNote = structuredClone(store.data.notes[0]!);
+  customNote.items[0]!.type = 'custom';
+  customNote.items[0]!.customTypeId = customTypeId;
+  await store.updateNote(customNote);
+  await assert.rejects(() => store.deleteCustomType(customTypeId), /choose a replacement/i);
+  await store.deleteCustomType(customTypeId, { type: 'translation' });
+  assert.equal(store.data.customTypes.length, 0);
+  assert.equal(store.data.notes[0]?.items[0]?.type, 'translation');
+  assert.equal(store.data.notes[0]?.items[0]?.customTypeId, undefined);
+  await store.dispose();
+});
+
+test('backs up schema 3 data with a schema-numbered filename before v4 migration', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'paper-notes-schema3-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(join(root, 'main.tex'), '\\documentclass{article}\n\\begin{document}x\\end{document}\n', 'utf8');
+  const current = createEmptyData();
+  const legacy = { ...current, schemaVersion: 3 } as Record<string, unknown>;
+  delete legacy.customTypes;
+  await (await import('node:fs/promises')).mkdir(join(root, 'notes'), { recursive: true });
+  const raw = `${JSON.stringify(legacy, null, 2)}\n`;
+  await writeFile(join(root, 'notes', 'paper-notes.json'), raw, 'utf8');
+  const store = new PaperNotesStore(root, defaultStorePaths());
+  const initialized = await store.initialize();
+  assert.equal(initialized.migrated, true);
+  assert.equal(initialized.notes.schemaVersion, 4);
+  assert.equal(await readFile(join(root, 'notes', 'legacy', 'paper-notes.schema3.bak.json'), 'utf8'), raw);
   await store.dispose();
 });
