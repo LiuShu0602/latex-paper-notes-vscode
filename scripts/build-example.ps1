@@ -22,8 +22,12 @@ try {
     & makeindex -o 'notes/build/notes/notetypes.ind' 'notes/build/notes/notetypes.idx'
     if ($LASTEXITCODE -ne 0) { throw "Example index build failed: $LASTEXITCODE" }
     $indexOutput = Get-Content -LiteralPath 'notes/build/notes/notetypes.ind' -Raw -Encoding UTF8
-    if ($indexOutput -notmatch 'Translation / 翻译') { throw 'Translation type is missing from the example index.' }
-    if ($indexOutput -notmatch 'Custom / 自定义') { throw 'Custom type is missing from the example index.' }
+    # Keep this script ASCII-only so Windows PowerShell 5.1 does not misdecode
+    # UTF-8 source before it reaches the explicit UTF-8 index read above.
+    $translationIndexLabel = 'Translation / ' + [char]0x7FFB + [char]0x8BD1
+    $customIndexLabel = 'Custom / ' + [char]0x81EA + [char]0x5B9A + [char]0x4E49
+    if ($indexOutput -notmatch [regex]::Escape($translationIndexLabel)) { throw 'Translation type is missing from the example index.' }
+    if ($indexOutput -notmatch [regex]::Escape($customIndexLabel)) { throw 'Custom type is missing from the example index.' }
     if ($indexOutput -match 'hyperxindexformat') { throw 'A custom type name corrupted makeindex syntax.' }
     Invoke-TeXPasses 'xelatex' $notesOut 'notes/paper_notes.tex' 'Notes example rebuild'
   }
