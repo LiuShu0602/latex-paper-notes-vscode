@@ -31,7 +31,8 @@ export async function run(): Promise<void> {
     project?: { sourceFiles?: string[] };
     notes?: Array<{ id?: string; sourceFile?: string }>;
   };
-  assert.equal(data.schemaVersion, 3);
+  assert.equal(data.schemaVersion, 4);
+  assert.ok(Array.isArray((data as { customTypes?: unknown }).customTypes));
   assert.deepEqual(data.project?.sourceFiles, ['main.tex', 'sections/introduction.tex', 'sections/method.tex']);
   assert.ok(data.notes?.some((note) => note.id === 'method:offset-correction' && note.sourceFile === 'sections/method.tex'));
 
