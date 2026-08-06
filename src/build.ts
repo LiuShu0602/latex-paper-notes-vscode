@@ -157,7 +157,8 @@ export class BuildManager implements vscode.Disposable {
             : await this.runBuiltin(project);
           if (!result.ok) {
             if (!this.cancelled) {
-              void vscode.window.showErrorMessage('Paper Notes build failed. Open the “LaTeX Paper Notes” output for details.');
+              this.output.appendLine('\nPublished PDFs were not replaced; PDF tabs still show the last successful build.');
+              void vscode.window.showErrorMessage('Paper Notes build failed. Published PDFs were not replaced; the PDF tabs still show the last successful build.');
             }
             return false;
           }
@@ -172,7 +173,8 @@ export class BuildManager implements vscode.Disposable {
             console.error(`[LaTeX Paper Notes] ERROR: ${message}`);
           }
           if (!this.cancelled) {
-            void vscode.window.showErrorMessage(`Paper Notes build failed: ${message}`);
+            this.output.appendLine('Published PDFs were not replaced; PDF tabs still show the last successful build.');
+            void vscode.window.showErrorMessage(`Paper Notes build failed: ${message} Published PDFs were not replaced.`);
           }
           return false;
         }

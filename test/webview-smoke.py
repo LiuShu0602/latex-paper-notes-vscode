@@ -166,7 +166,7 @@ def main() -> None:
 
             page.get_by_role("button", name="Project status").click()
             status = page.get_by_role("dialog", name="Project status")
-            assert "0.4.0" in status.inner_text()
+            assert "0.4.1" in status.inner_text()
             status.get_by_role("button", name="Close").last.click()
 
             page.emulate_media(reduced_motion="reduce")

@@ -51,8 +51,8 @@ test('recognizes and upgrades an untouched v0.4 beta style', async (t) => {
   await mkdir(join(root, 'notes'), { recursive: true });
 
   const betaWithPlaceholder = renderNotesStylePackage()
-    .replace('project-style-version: 0.4.0', 'project-style-version: 0.4.0-beta.1')
-    .replace('v0.4.0 Companion paper notes', 'v0.4.0-beta.1 Companion paper notes')
+    .replace(`project-style-version: ${PROJECT_STYLE_VERSION}`, 'project-style-version: 0.4.0-beta.1')
+    .replace(`v${PROJECT_STYLE_VERSION} Companion paper notes`, 'v0.4.0-beta.1 Companion paper notes')
     .replace(/template-sha256: [a-f0-9]{64}/i, 'template-sha256: __PAPER_NOTES_TEMPLATE_HASH__');
   const beta = betaWithPlaceholder.replace(
     '__PAPER_NOTES_TEMPLATE_HASH__',
@@ -71,5 +71,42 @@ test('recognizes and upgrades an untouched v0.4 beta style', async (t) => {
   assert.equal(
     await readFile(join(root, 'notes', 'legacy', 'paper-notes-style.v0.4.0-beta.1.bak.sty'), 'utf8'),
     beta,
+  );
+});
+
+test('upgrades the untouched v0.4.0 style that hardcoded main links', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'paper-notes-style-v040-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'notes'), { recursive: true });
+
+  const v040WithPlaceholder = renderNotesStylePackage()
+    .replace(`project-style-version: ${PROJECT_STYLE_VERSION}`, 'project-style-version: 0.4.0')
+    .replace(`v${PROJECT_STYLE_VERSION} Companion paper notes`, 'v0.4.0 Companion paper notes')
+    .replace(String.raw`\textbf{Source / 来源:} #1\quad`, String.raw`\textbf{Source / 来源:} main\quad`)
+    .replace(
+      String.raw`\hyperref[#1-pnote:#2]{\pageref*{#1-pnote:#2}}`,
+      String.raw`\hyperref[main-pnote:#2]{\pageref*{main-pnote:#2}}`,
+    )
+    .replace('paper-notes-editor:#1:#2', 'paper-notes-editor:main:#2')
+    .replace(/template-sha256: [a-f0-9]{64}/i, 'template-sha256: __PAPER_NOTES_TEMPLATE_HASH__');
+  const v040 = v040WithPlaceholder.replace(
+    '__PAPER_NOTES_TEMPLATE_HASH__',
+    hashText(v040WithPlaceholder.replace(/\r\n?/g, '\n')),
+  );
+  await writeFile(join(root, 'notes', 'paper-notes-style.sty'), v040, 'utf8');
+
+  const project = createEmptyData().project;
+  const before = await inspectProjectStyle(root, project);
+  assert.equal(before.kind, 'stock-old');
+  assert.equal(before.installedVersion, '0.4.0');
+
+  const result = await upgradeProjectStyle(root, project);
+  assert.equal(result.upgraded, true);
+  assert.equal(result.status.installedVersion, PROJECT_STYLE_VERSION);
+  const upgraded = await readFile(join(root, 'notes', 'paper-notes-style.sty'), 'utf8');
+  assert.ok(upgraded.includes(String.raw`\hyperref[#1-pnote:#2]{\pageref*{#1-pnote:#2}}`));
+  assert.equal(
+    await readFile(join(root, 'notes', 'legacy', 'paper-notes-style.v0.4.0.bak.sty'), 'utf8'),
+    v040,
   );
 });

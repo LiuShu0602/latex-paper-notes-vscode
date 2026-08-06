@@ -26,14 +26,14 @@ LaTeX Paper Notes 是一个本地优先的 VS Code 扩展：在论文 LaTeX 中�
 
 ## 安装
 
-1. 获取 `latex-paper-notes-0.4.0.vsix` 和 SHA-256 文件。
+1. 获取 `latex-paper-notes-0.4.1.vsix` 和 SHA-256 文件。
 2. 在 VS Code 执行“Extensions: Install from VSIX...”并选择 VSIX。
 3. 安装后由你手动执行一次“Developer: Reload Window”。
 
 也可执行：
 
 ```powershell
-code --install-extension .\latex-paper-notes-0.4.0.vsix
+code --install-extension .\latex-paper-notes-0.4.1.vsix
 ```
 
 ## 一键初始化
@@ -92,7 +92,7 @@ Selected paper text.
 
 ## v0.2 迁移
 
-打开 schema v1/v2/v3 项目会无损升级到 v4：笔记 ID、时间、内容、摘录、定位器和 PDF 目标名称均保持不变。未修改的 v0.3 或 v0.4 beta 项目样式会先备份再自动升级；手工修改过的样式不会被静默覆盖。现有构建脚本会迁移为 `legacy-script` 模式，因此原有私有补充材料流程不受影响。详见 [MIGRATION.md](MIGRATION.md)。
+打开 schema v1/v2/v3 项目会无损升级到 v4：笔记 ID、时间、内容、摘录、定位器和 PDF 目标名称均保持不变。未修改的 v0.3、v0.4 beta 或 v0.4.0 项目样式会先备份再自动升级；手工修改过的样式不会被静默覆盖。现有构建脚本会迁移为 `legacy-script` 模式，因此原有私有补充材料流程不受影响。详见 [MIGRATION.md](MIGRATION.md)。
 
 ## 隐私与范围
 

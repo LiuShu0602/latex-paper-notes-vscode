@@ -30,6 +30,10 @@ test('initialization previews and applies an idempotent removable integration', 
   const style = await readFile(join(root, 'notes', 'paper-notes-style.sty'), 'utf8');
   assert.match(style, new RegExp(`project-style-version: ${PROJECT_STYLE_VERSION.replace(/\./g, '\\.')}`));
   assert.equal(verifyEmbeddedTemplateHash(style), true);
+  assert.ok(style.includes(String.raw`\textbf{Source / 来源:} #1\quad`));
+  assert.ok(style.includes(String.raw`\hyperref[#1-pnote:#2]{\pageref*{#1-pnote:#2}}`));
+  assert.ok(style.includes(String.raw`paper-notes-editor:#1:#2`));
+  assert.ok(!style.includes(String.raw`\hyperref[main-pnote:#2]`));
   const jsonText = await readFile(join(root, 'notes', 'paper-notes.json'), 'utf8');
   const generated = await readFile(join(root, 'notes', 'main_notes.tex'), 'utf8');
   assert.equal(generatedHash(generated), hashText(jsonText));

@@ -6,7 +6,7 @@ import { resolveInsideProject, type SourceGraph } from './project.js';
 
 export const INTEGRATION_BEGIN = '% >>> LaTeX Paper Notes integration >>>';
 export const INTEGRATION_END = '% <<< LaTeX Paper Notes integration <<<';
-export const PROJECT_STYLE_VERSION = '0.4.0';
+export const PROJECT_STYLE_VERSION = '0.4.1';
 
 export interface InitializationOptions {
   rootFile: string;
@@ -258,10 +258,10 @@ export function renderNotesStylePackage(notesDir = 'notes'): string {
   \begingroup\edef\@currentHref{note.#1.#2}\label{note:#1:#2}\endgroup
   \addcontentsline{toc}{subsection}{\protect\numberline{\thepapernote}#3}%
   \begin{tcolorbox}[enhanced,breakable,colback=white,colframe=PNFrame,boxrule=.7pt,arc=1.5mm,title={Note~\thepapernote: #3},fonttitle=\bfseries,coltitle=white,colbacktitle=PNFrame,before skip=1.1em,after skip=1.1em]
-  \small\noindent\textbf{Source / 来源:} main\quad
-  \textbf{Page / 页码:} \hyperref[main-pnote:#2]{\pageref*{main-pnote:#2}}\quad
+  \small\noindent\textbf{Source / 来源:} #1\quad
+  \textbf{Page / 页码:} \hyperref[#1-pnote:#2]{\pageref*{#1-pnote:#2}}\quad
   \textbf{ID:} \texttt{\detokenize{#2}}\par\smallskip
-  \textbf{Editor / 编辑:} \href{paper-notes-editor:main:#2}{Open in VS Code / 在 VS Code 中打开}\par\smallskip
+  \textbf{Editor / 编辑:} \href{paper-notes-editor:#1:#2}{Open in VS Code / 在 VS Code 中打开}\par\smallskip
 }{\end{tcolorbox}}
 \NewDocumentCommand{\SourceExcerpt}{+m}{\begin{tcolorbox}[colback=black!3,colframe=black!25,boxrule=.4pt,arc=1mm]\textbf{Excerpt / 原文摘录:}\enspace\emph{#1}\end{tcolorbox}}
 \NewDocumentCommand{\NoteHeading}{m}{\par\medskip\noindent\textcolor{PNFrame}{\bfseries #1}\par\smallskip}
