@@ -1,123 +1,68 @@
 import MarkdownIt from 'markdown-it';
 import renderMathInElement from 'katex/contrib/auto-render';
-import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
+import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import { EventBus, PDFFindController, PDFLinkService, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import {
   NavigationHistory,
   isNavigationRoute,
-  type NavigationRoute,
-  type NavigationSnapshot,
-  type PdfViewState
+  type NavigationRoute
 } from '../navigation.js';
 import { parsePdfLinkTarget } from '../pdf-links.js';
+import {
+  actionButton,
+  codicon,
+  element,
+  elementWithText,
+  focusFirst,
+  iconButton,
+  mustElement,
+  trapDialogFocus
+} from './components.js';
+import type { CodiconName } from './components.js';
+import { countCustomTypeUsage, noteMatches } from './notes-view.js';
+import { createPdfSessions, parsePdfPoint, pdfViewState, type PdfPoint, type PdfSession } from './pdf-view.js';
+import {
+  isPanelTab,
+  isTypeFilter,
+  mergeIncomingNotes,
+  nonNegativeNumber,
+  parsePdfResource,
+  parseSourcePosition,
+  positiveNumber
+} from './state.js';
+import {
+  BUILTIN_NOTE_TYPES,
+  normalizeHexColor,
+  typeColor,
+  typeLabel as registeredTypeLabel
+} from './type-registry.js';
+import type {
+  AppState,
+  CustomNoteType,
+  NoteItem,
+  NoteType,
+  PanelNote,
+  PanelTab,
+  PdfResource,
+  PdfTab,
+  PersistedPanelState,
+  TypeFilter,
+  VsCodeApi
+} from './types.js';
 import 'katex/dist/katex.min.css';
 import 'pdfjs-dist/web/pdf_viewer.css';
+import '@vscode/codicons/dist/codicon.css';
 import './style.css';
 
-declare function acquireVsCodeApi(): {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-};
-
-type NoteType = 'thought' | 'example' | 'question' | 'todo';
-type NoteFormat = 'markdown' | 'latex-legacy';
-type PanelTab = 'notes' | 'notesPdf' | 'annotatedPdf';
-type PdfTab = Exclude<PanelTab, 'notes'>;
+declare function acquireVsCodeApi(): VsCodeApi;
 const PDF_TO_CSS_UNITS = 96 / 72;
-
-interface NoteItem {
-  id: string;
-  type: NoteType;
-  format: NoteFormat;
-  content: string;
-}
-
-interface PanelNote {
-  id: string;
-  documentId: 'main';
-  sourceFile: string;
-  title: string;
-  sectionTitle: string;
-  sourceSnapshot: string;
-  sourceHash: string;
-  sourceSelector: {
-    exact: string;
-    prefix: string;
-    suffix: string;
-    normalizedHash: string;
-    previousOffset: number;
-  };
-  excerptMode: 'auto' | 'manual';
-  excerpt: string;
-  items: NoteItem[];
-  legacyPrelude?: string;
-  legacyPostlude?: string;
-  createdAt: string;
-  updatedAt: string;
-  revision?: number;
-  markerStatus: 'linked' | 'orphan';
-  sourceOrder: number;
-}
-
-interface AppState {
-  notes: PanelNote[];
-  currentId?: string;
-  markerProblems: string[];
-  annotatedPdf: PdfResource;
-  notesPdf: PdfResource;
-  workerUri: string;
-  locale: 'zh-CN' | 'en';
-  assetBaseUri: string;
-  project?: { rootFile: string; sourceFiles: string[]; notesDir: string };
-}
-
-interface PdfResource {
-  uri: string;
-  available: boolean;
-}
-
-interface PdfSession {
-  document?: PDFDocumentProxy;
-  viewer?: PDFViewer;
-  linkService?: PDFLinkService;
-  findController?: PDFFindController;
-  eventBus?: EventBus;
-  container?: HTMLDivElement;
-  loadedUri: string;
-  page: number;
-  scale: number;
-  scrollTop: number;
-  scrollLeft: number;
-  searchQuery: string;
-  destination?: string;
-  requestedDestination?: string;
-  requestedPoint?: PdfPoint;
-  viewToken: number;
-}
-
-interface PdfPoint {
-  page: number;
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-}
-
-interface PersistedPanelState {
-  activeTab: PanelTab;
-  currentId?: string;
-  searchText: string;
-  typeFilter: NoteType | 'all' | 'todo-only';
-  pdf: Record<PdfTab, PdfViewState & { searchQuery: string }>;
-  navigation: NavigationSnapshot;
-}
 
 const vscode = acquireVsCodeApi();
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
 const app = mustElement('app');
 let state: AppState = {
   notes: [],
+  customTypes: [],
   markerProblems: [],
   annotatedPdf: { uri: '', available: false },
   notesPdf: { uri: '', available: false },
@@ -127,15 +72,13 @@ let state: AppState = {
 };
 let activeTab: PanelTab = 'notes';
 let searchText = '';
-let typeFilter: NoteType | 'all' | 'todo-only' = 'all';
+let typeFilter: TypeFilter = 'all';
+let mobileDetail = false;
 const saveTimers = new Map<string, number>();
 const dirtyNotes = new Map<string, PanelNote>();
 const sentRevisions = new Map<string, number>();
 let activeTextarea: HTMLTextAreaElement | undefined;
-const pdfSessions: Record<PdfTab, PdfSession> = {
-  notesPdf: { loadedUri: '', page: 1, scale: 1.15, scrollTop: 0, scrollLeft: 0, searchQuery: '', viewToken: 0 },
-  annotatedPdf: { loadedUri: '', page: 1, scale: 1.15, scrollTop: 0, scrollLeft: 0, searchQuery: '', viewToken: 0 }
-};
+const pdfSessions = createPdfSessions();
 let navigation = new NavigationHistory();
 let restoredStateApplied = false;
 
@@ -143,26 +86,34 @@ const messages = {
   'zh-CN': {
     appTitle: '论文伴随笔记', subtitle: 'LaTeX 源码联动笔记', notes: '笔记', notesPdf: '笔记 PDF', annotatedPdf: '批注论文',
     back: '返回上一位置', forward: '前往下一位置', quickBuild: '快速编译', fullBuild: '完整构建', validate: '验证锚点', ready: '就绪',
-    noteCount: '条笔记', search: '搜索标题、摘录和内容…', all: '全部', thought: '感想', example: '例子', question: '疑问', todo: '待修改',
+    noteCount: '条笔记', search: '搜索标题、摘录、类型和内容…', all: '全部', thought: '感想', example: '例子', question: '疑问', todo: '待修改', translation: '翻译', custom: '自定义',
     noMatches: '没有匹配的笔记', linked: '已关联源码', orphan: '源码标记缺失', source: '原文摘录', auto: '自动同步', manual: '手动摘录',
     viewLatex: '查看当前 LaTeX 选区', items: '批注条目', locateSource: '定位源码', relink: '重新关联当前选区', delete: '删除',
     markdown: 'Markdown + 数学', legacy: '旧 LaTeX · 无损模式', placeholder: '写下你的想法。公式可用 $...$ 或 $$...$$。',
     saved: '已保存', editing: '正在编辑…', saving: '正在保存…', imageDescription: '图片说明', previewEmpty: '预览会显示在这里',
     timeUnknown: '时间未知', updated: '更新', itemUnit: '项', sourceStart: '从论文原文开始',
     sourceHelp: '在 LaTeX 中选中一句话、段落或完整公式，然后右键“为选区添加论文笔记”。',
-    pdfSearch: '在 PDF 中搜索', previousPage: '上一页', nextPage: '下一页', fitWidth: '适宽', reload: '重新载入', compiledNotes: '编译笔记'
+    pdfSearch: '在 PDF 中搜索', previousPage: '上一页', nextPage: '下一页', fitWidth: '适宽', reload: '重新载入', compiledNotes: '编译笔记',
+    addAnnotation: '添加批注', typeFilter: '类型筛选', createCustom: '新建自定义类型…', manageTypes: '管理类型…',
+    customName: '类型名称', customColor: '强调色', saveType: '保存类型', cancel: '取消', editType: '编辑', deleteType: '删除类型',
+    noCustom: '还没有自定义类型', replaceWith: '删除前替换为', styleBlocked: '项目样式需要升级后才能使用“翻译”和“自定义”。',
+    upgradeStyle: '升级项目组件', projectStatus: '项目状态', close: '关闭', more: '更多操作', backToList: '返回笔记列表'
   },
   en: {
     appTitle: 'LaTeX Paper Notes', subtitle: 'Source-linked academic notebook', notes: 'Notes', notesPdf: 'Notes PDF', annotatedPdf: 'Annotated paper',
     back: 'Go back', forward: 'Go forward', quickBuild: 'Quick build', fullBuild: 'Full build', validate: 'Validate markers', ready: 'Ready',
-    noteCount: 'notes', search: 'Search titles, excerpts, and content…', all: 'All', thought: 'Thought', example: 'Example', question: 'Question', todo: 'To revise',
+    noteCount: 'notes', search: 'Search titles, excerpts, types, and content…', all: 'All', thought: 'Thought', example: 'Example', question: 'Question', todo: 'To revise', translation: 'Translation', custom: 'Custom',
     noMatches: 'No matching notes', linked: 'Linked to source', orphan: 'Source markers missing', source: 'Source excerpt', auto: 'Auto-sync', manual: 'Manual excerpt',
     viewLatex: 'View current LaTeX selection', items: 'Annotation items', locateSource: 'Locate source', relink: 'Relink current selection', delete: 'Delete',
     markdown: 'Markdown + math', legacy: 'Legacy LaTeX · lossless', placeholder: 'Write your note. Use $...$ or $$...$$ for math.',
     saved: 'Saved', editing: 'Editing…', saving: 'Saving…', imageDescription: 'Image description', previewEmpty: 'Preview appears here',
     timeUnknown: 'Unknown time', updated: 'Updated', itemUnit: 'items', sourceStart: 'Start from the paper source',
     sourceHelp: 'Select a sentence, paragraph, or complete formula in LaTeX, then choose “Add Paper Note from Selection”.',
-    pdfSearch: 'Search PDF', previousPage: 'Previous page', nextPage: 'Next page', fitWidth: 'Fit width', reload: 'Reload', compiledNotes: 'Compiled notes'
+    pdfSearch: 'Search PDF', previousPage: 'Previous page', nextPage: 'Next page', fitWidth: 'Fit width', reload: 'Reload', compiledNotes: 'Compiled notes',
+    addAnnotation: 'Add annotation', typeFilter: 'Type filter', createCustom: 'New custom type…', manageTypes: 'Manage types…',
+    customName: 'Type name', customColor: 'Accent color', saveType: 'Save type', cancel: 'Cancel', editType: 'Edit', deleteType: 'Delete type',
+    noCustom: 'No custom types yet', replaceWith: 'Replace before deleting', styleBlocked: 'Upgrade the project style before using Translation or Custom.',
+    upgradeStyle: 'Upgrade project components', projectStatus: 'Project status', close: 'Close', more: 'More actions', backToList: 'Back to notes'
   }
 } as const;
 
@@ -179,12 +130,10 @@ window.addEventListener('message', (event: MessageEvent<Record<string, unknown>>
     case 'state':
       {
       const incomingNotes = (message.notes as PanelNote[]) ?? [];
-      const mergedNotes = incomingNotes.map((note) => {
-        const local = dirtyNotes.get(note.id);
-        return local && (local.revision ?? 0) > (note.revision ?? 0) ? local : note;
-      });
+      const mergedNotes = mergeIncomingNotes(incomingNotes, dirtyNotes);
       state = {
         notes: mergedNotes,
+        customTypes: (message.customTypes as CustomNoteType[]) ?? [],
         currentId: message.currentId as string | undefined,
         markerProblems: (message.markerProblems as string[]) ?? [],
         annotatedPdf: parsePdfResource(message.annotatedPdf),
@@ -192,7 +141,8 @@ window.addEventListener('message', (event: MessageEvent<Record<string, unknown>>
         workerUri: String(message.workerUri ?? ''),
         locale: message.locale === 'en' ? 'en' : 'zh-CN',
         assetBaseUri: String(message.assetBaseUri ?? ''),
-        project: message.project as AppState['project']
+        project: message.project as AppState['project'],
+        projectStatus: message.projectStatus as AppState['projectStatus']
       };
       if (!restoredStateApplied) {
         applyPersistedState(message.restoredState);
@@ -298,23 +248,24 @@ function buildHeader(): HTMLElement {
   const tabs = element('nav', 'tabs');
   tabs.setAttribute('aria-label', t('appTitle'));
   tabs.append(
-    tabButton('notes', t('notes'), '$(notebook)'),
-    tabButton('notesPdf', t('notesPdf'), '$(book)'),
-    tabButton('annotatedPdf', t('annotatedPdf'), '$(file-pdf)')
+    tabButton('notes', t('notes'), 'notebook'),
+    tabButton('notesPdf', t('notesPdf'), 'notebook'),
+    tabButton('annotatedPdf', t('annotatedPdf'), 'go-to-file')
   );
 
   const actions = element('div', 'masthead-actions');
-  const back = iconButton('←', t('back'), () => navigateHistory('back'));
+  const back = iconButton('arrow-left', t('back'), () => navigateHistory('back'));
   back.disabled = !navigation.canGoBack;
-  const forward = iconButton('→', t('forward'), () => navigateHistory('forward'));
+  const forward = iconButton('arrow-right', t('forward'), () => navigateHistory('forward'));
   forward.disabled = !navigation.canGoForward;
-  actions.append(
-    back,
-    forward,
-    actionButton(t('quickBuild'), 'primary', () => postBuild('quick')),
-    actionButton(t('fullBuild'), 'quiet', () => postBuild('full')),
-    iconButton('✓', t('validate'), () => vscode.postMessage({ type: 'validate' }))
-  );
+  const quick = actionButton(t('quickBuild'), 'primary compact-build', () => postBuild('quick'));
+  const full = actionButton(t('fullBuild'), 'quiet wide-action', () => postBuild('full'));
+  const validate = iconButton('pass', t('validate'), () => vscode.postMessage({ type: 'validate' }));
+  validate.classList.add('wide-action');
+  const status = iconButton('settings-gear', t('projectStatus'), () => openProjectStatusDialog(status));
+  status.classList.add('wide-action');
+  const more = buildHeaderOverflow();
+  actions.append(back, forward, quick, full, validate, status, more);
   const save = element('span', 'save-state');
   save.id = 'save-state';
   save.textContent = t('ready');
@@ -323,8 +274,25 @@ function buildHeader(): HTMLElement {
   return header;
 }
 
+function buildHeaderOverflow(): HTMLElement {
+  const details = element('details', 'header-overflow');
+  const summary = element('summary', 'icon-button');
+  summary.setAttribute('aria-label', t('more'));
+  summary.title = t('more');
+  summary.append(codicon('ellipsis'));
+  const menu = element('div', 'popover-menu header-menu');
+  menu.setAttribute('role', 'menu');
+  menu.append(
+    menuButton(t('fullBuild'), 'check', () => postBuild('full')),
+    menuButton(t('validate'), 'pass', () => vscode.postMessage({ type: 'validate' })),
+    menuButton(t('projectStatus'), 'settings-gear', () => openProjectStatusDialog(summary))
+  );
+  details.append(summary, menu);
+  return details;
+}
+
 function buildNotesWorkspace(): HTMLElement {
-  const wrapper = element('section', 'notes-layout');
+  const wrapper = element('section', `notes-layout${mobileDetail ? ' mobile-detail' : ' mobile-list'}`);
   wrapper.append(buildNoteRail(), buildNoteDetail());
   return wrapper;
 }
@@ -346,22 +314,7 @@ function buildNoteRail(): HTMLElement {
   });
   top.append(count, search);
 
-  const filters = element('div', 'filters');
-  const filterDefinitions: Array<[typeof typeFilter, string]> = [
-    ['all', t('all')],
-    ['thought', t('thought')],
-    ['example', t('example')],
-    ['question', t('question')],
-    ['todo-only', t('todo')]
-  ];
-  for (const [value, label] of filterDefinitions) {
-    const button = actionButton(label, value === typeFilter ? 'filter active' : 'filter', () => {
-      typeFilter = value;
-      persistPanelState();
-      render();
-    });
-    filters.append(button);
-  }
+  const filters = buildTypeFilterControl();
 
   const list = element('div', 'note-list');
   list.setAttribute('role', 'listbox');
@@ -379,13 +332,7 @@ function buildNoteRail(): HTMLElement {
 
 function renderNoteList(list: HTMLElement): void {
   list.replaceChildren();
-  const query = searchText.trim().toLowerCase();
-  const notes = state.notes.filter((note) => {
-    const typeMatches = typeFilter === 'all'
-      || (typeFilter === 'todo-only' ? note.items.some((item) => item.type === 'todo') : note.items.some((item) => item.type === typeFilter));
-    const text = `${note.title} ${note.id} ${note.excerpt} ${note.items.map((item) => item.content).join(' ')}`.toLowerCase();
-    return typeMatches && (!query || text.includes(query));
-  });
+  const notes = state.notes.filter((note) => noteMatches(note, typeFilter, searchText, state.customTypes));
   if (notes.length === 0) {
     const empty = element('div', 'empty-list');
     empty.innerHTML = `<span>∅</span><p>${t('noMatches')}</p>`;
@@ -411,7 +358,8 @@ function renderNoteList(list: HTMLElement): void {
     button.addEventListener('click', () => {
       flushPendingSaves();
       state.currentId = note.id;
-      openSourceForNote(note.id);
+      mobileDetail = true;
+      navigateToRoute({ surface: 'noteEditor', noteId: note.id });
     });
     list.append(button);
   });
@@ -428,6 +376,11 @@ function buildNoteDetail(): HTMLElement {
   }
 
   const heading = element('div', 'detail-heading');
+  const mobileBack = actionButton(t('backToList'), 'mobile-back quiet', () => {
+    mobileDetail = false;
+    persistPanelState();
+    render();
+  }, 'chevron-left');
   const eyebrow = element('span', 'eyebrow');
   eyebrow.textContent = `${note.sectionTitle} / ${note.sourceFile} / ${note.id} / ${t('updated')} ${longDate(note.updatedAt)}`;
   const title = document.createElement('input');
@@ -449,7 +402,7 @@ function buildNoteDetail(): HTMLElement {
     );
   }
   detailActions.append(actionButton(t('delete'), 'danger', () => vscode.postMessage({ type: 'deleteNote', id: note.id })));
-  heading.append(eyebrow, title, detailActions);
+  heading.append(mobileBack, eyebrow, title, detailActions);
 
   const source = element('section', 'source-card');
   const sourceHeader = element('div', 'source-header');
@@ -484,44 +437,74 @@ function buildNoteDetail(): HTMLElement {
   const itemsHeader = element('div', 'items-header');
   const itemsTitle = document.createElement('h2');
   itemsTitle.textContent = t('items');
-  const addMenu = element('div', 'add-menu');
-  for (const type of ['thought', 'example', 'question', 'todo'] as NoteType[]) {
-    addMenu.append(actionButton(`＋${typeLabel(type)}`, `add ${type}`, () => {
-      note.items.push({ id: crypto.randomUUID(), type, format: 'markdown', content: '' });
-      render();
-      scheduleSave(note);
-    }));
-  }
+  const addMenu = buildAddAnnotationMenu(note);
   itemsHeader.append(itemsTitle, addMenu);
 
   const items = element('div', 'items');
   note.items.forEach((item, index) => items.append(buildItemEditor(note, item, index)));
-  detail.append(heading, source, itemsHeader, items);
+  detail.append(heading, source);
+  if (state.projectStatus && !state.projectStatus.styleCompatible) {
+    const warning = element('section', 'component-warning');
+    warning.append(
+      codicon('warning'),
+      elementWithText('span', '', t('styleBlocked')),
+      actionButton(t('upgradeStyle'), 'quiet small', () => vscode.postMessage({ type: 'upgradeProjectStyle' }))
+    );
+    detail.append(warning);
+  }
+  detail.append(itemsHeader, items);
   return detail;
 }
 
 function buildItemEditor(note: PanelNote, item: NoteItem, index: number): HTMLElement {
   const card = element('section', `item-card type-${item.type}`);
+  card.style.setProperty('--item-accent', itemAccent(item));
   const header = element('div', 'item-header');
   const ordinal = element('span', 'item-ordinal');
   ordinal.textContent = String(index + 1).padStart(2, '0');
   const type = document.createElement('select');
   type.setAttribute('aria-label', '条目类型');
-  for (const value of ['thought', 'example', 'question', 'todo'] as NoteType[]) {
+  const builtinGroup = document.createElement('optgroup');
+  builtinGroup.label = state.locale === 'en' ? 'Built-in' : '固定类型';
+  for (const definition of BUILTIN_NOTE_TYPES) {
     const option = document.createElement('option');
-    option.value = value;
-    option.textContent = typeLabel(value);
-    option.selected = value === item.type;
-    type.append(option);
+    option.value = `builtin:${definition.id}`;
+    option.textContent = definition.label[state.locale];
+    option.selected = definition.id === item.type;
+    if (!styleReady() && definition.id === 'translation') {
+      option.disabled = true;
+    }
+    builtinGroup.append(option);
+  }
+  type.append(builtinGroup);
+  if (state.customTypes.length > 0) {
+    const customGroup = document.createElement('optgroup');
+    customGroup.label = t('custom');
+    for (const customType of state.customTypes) {
+      const option = document.createElement('option');
+      option.value = `custom:${customType.id}`;
+      option.textContent = customType.name;
+      option.selected = item.type === 'custom' && item.customTypeId === customType.id;
+      option.disabled = !styleReady();
+      customGroup.append(option);
+    }
+    type.append(customGroup);
   }
   type.addEventListener('change', () => {
-    item.type = type.value as NoteType;
+    if (type.value.startsWith('custom:')) {
+      item.type = 'custom';
+      item.customTypeId = type.value.slice('custom:'.length);
+    } else {
+      item.type = type.value.slice('builtin:'.length) as NoteType;
+      delete item.customTypeId;
+    }
     card.className = `item-card type-${item.type}`;
+    card.style.setProperty('--item-accent', itemAccent(item));
     scheduleSave(note);
   });
   const format = element('span', 'format-badge');
   format.textContent = item.format === 'latex-legacy' ? t('legacy') : t('markdown');
-  const remove = iconButton('×', '删除此条目', () => {
+  const remove = iconButton('close', state.locale === 'en' ? 'Delete this item' : '删除此条目', () => {
     note.items.splice(index, 1);
     render();
     scheduleSave(note);
@@ -534,7 +517,7 @@ function buildItemEditor(note: PanelNote, item: NoteItem, index: number): HTMLEl
   textarea.value = item.content;
   textarea.rows = Math.max(7, Math.min(22, item.content.split('\n').length + 3));
   textarea.placeholder = t('placeholder');
-  textarea.setAttribute('aria-label', `${typeLabel(item.type)}内容`);
+  textarea.setAttribute('aria-label', `${typeLabel(item.type, item.customTypeId)}${state.locale === 'en' ? ' content' : '内容'}`);
   textarea.addEventListener('focus', () => {
     activeTextarea = textarea;
   });
@@ -546,13 +529,13 @@ function buildItemEditor(note: PanelNote, item: NoteItem, index: number): HTMLEl
     scheduleSave(note);
   });
 
-  const tools: Array<[string, string, () => void]> = [
-    ['B', '粗体', () => wrapSelection(textarea, '**', '**', '重点')],
-    ['∑', '行内公式', () => wrapSelection(textarea, '$', '$', 'x')],
-    ['≡', '列表', () => insertText(textarea, '- 条目一\n- 条目二')],
-    ['❝', '引文', () => insertText(textarea, '> 引文')],
-    ['▦', '表格', () => insertText(textarea, '| 项目 | 说明 |\n|---|---|\n| A | 内容 |')],
-    ['▧', '图片', () => {
+  const tools: Array<[CodiconName, string, () => void]> = [
+    ['bold', '粗体', () => wrapSelection(textarea, '**', '**', '重点')],
+    ['symbol-operator', '行内公式', () => wrapSelection(textarea, '$', '$', 'x')],
+    ['list-unordered', '列表', () => insertText(textarea, '- 条目一\n- 条目二')],
+    ['quote', '引文', () => insertText(textarea, '> 引文')],
+    ['table', '表格', () => insertText(textarea, '| 项目 | 说明 |\n|---|---|\n| A | 内容 |')],
+    ['file-media', '图片', () => {
       activeTextarea = textarea;
       vscode.postMessage({ type: 'importImage', id: note.id });
     }]
@@ -569,6 +552,471 @@ function buildItemEditor(note: PanelNote, item: NoteItem, index: number): HTMLEl
   }
   card.append(header, toolbar, textarea, preview);
   return card;
+}
+
+function buildAddAnnotationMenu(note: PanelNote): HTMLElement {
+  const container = element('div', 'menu-control add-annotation');
+  const trigger = actionButton(t('addAnnotation'), 'primary add-trigger', () => toggle(), 'plus');
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'false');
+  const menu = element('div', 'popover-menu annotation-menu');
+  menu.hidden = true;
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', t('addAnnotation'));
+
+  const close = (): void => {
+    menu.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+  };
+  const add = (type: NoteType, customTypeId?: string): void => {
+    note.items.push({
+      id: crypto.randomUUID(),
+      type,
+      ...(type === 'custom' && customTypeId ? { customTypeId } : {}),
+      format: 'markdown',
+      content: ''
+    });
+    close();
+    render();
+    scheduleSave(note);
+  };
+  for (const definition of BUILTIN_NOTE_TYPES) {
+    const disabled = definition.id === 'translation' && !styleReady();
+    menu.append(menuButton(
+      definition.label[state.locale],
+      'plus',
+      () => add(definition.id),
+      disabled,
+      definition.color
+    ));
+  }
+  menu.append(element('div', 'menu-separator'));
+  if (state.customTypes.length === 0) {
+    menu.append(elementWithText('div', 'menu-empty', t('noCustom')));
+  } else {
+    for (const customType of state.customTypes) {
+      menu.append(menuButton(customType.name, 'plus', () => add('custom', customType.id), !styleReady(), customType.color));
+    }
+  }
+  menu.append(
+    element('div', 'menu-separator'),
+    menuButton(t('createCustom'), 'symbol-color', () => {
+      close();
+      openCustomTypeDialog(undefined, trigger);
+    }, !styleReady()),
+    menuButton(t('manageTypes'), 'settings-gear', () => {
+      close();
+      openManageTypesDialog(trigger);
+    })
+  );
+  if (!styleReady()) {
+    const hint = elementWithText('div', 'menu-hint', t('styleBlocked'));
+    hint.append(actionButton(t('upgradeStyle'), 'link-button', () => vscode.postMessage({ type: 'upgradeProjectStyle' })));
+    menu.append(hint);
+  }
+  const toggle = (): void => {
+    menu.hidden = !menu.hidden;
+    trigger.setAttribute('aria-expanded', String(!menu.hidden));
+    if (!menu.hidden) {
+      focusFirst(menu);
+    }
+  };
+  wireMenu(menu, trigger, close);
+  container.append(trigger, menu);
+  return container;
+}
+
+function buildTypeFilterControl(): HTMLElement {
+  const container = element('div', 'menu-control filter-control');
+  const label = filterLabel(typeFilter);
+  const trigger = actionButton(label, `filter-trigger${typeFilter === 'all' ? '' : ' active'}`, () => toggle(), 'list-filter');
+  trigger.setAttribute('aria-label', `${t('typeFilter')}: ${label}`);
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'false');
+  const menu = element('div', 'popover-menu filter-menu');
+  menu.hidden = true;
+  menu.setAttribute('role', 'menu');
+  const close = (): void => {
+    menu.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+  };
+  const choose = (value: TypeFilter): void => {
+    typeFilter = value;
+    close();
+    persistPanelState();
+    render();
+  };
+  menu.append(menuButton(t('all'), 'filter', () => choose('all'), false, undefined, typeFilter === 'all'));
+  for (const definition of BUILTIN_NOTE_TYPES) {
+    menu.append(menuButton(
+      definition.label[state.locale], 'filter', () => choose(definition.id), false,
+      definition.color, typeFilter === definition.id || (definition.id === 'todo' && typeFilter === 'todo-only')
+    ));
+  }
+  if (state.customTypes.length > 0) {
+    menu.append(element('div', 'menu-separator'));
+    menu.append(menuButton(t('custom'), 'filter', () => choose('custom'), false, undefined, typeFilter === 'custom'));
+    for (const customType of state.customTypes) {
+      menu.append(menuButton(
+        customType.name, 'filter', () => choose(`custom:${customType.id}`), false,
+        customType.color, typeFilter === `custom:${customType.id}`
+      ));
+    }
+  }
+  const toggle = (): void => {
+    menu.hidden = !menu.hidden;
+    trigger.setAttribute('aria-expanded', String(!menu.hidden));
+    if (!menu.hidden) {
+      focusFirst(menu);
+    }
+  };
+  wireMenu(menu, trigger, close);
+  container.append(trigger, menu);
+  return container;
+}
+
+function filterLabel(filter: TypeFilter): string {
+  if (filter === 'all') {
+    return t('all');
+  }
+  if (filter === 'todo-only') {
+    return t('todo');
+  }
+  if (filter.startsWith('custom:')) {
+    return state.customTypes.find((type) => type.id === filter.slice('custom:'.length))?.name ?? t('custom');
+  }
+  return typeLabel(filter as NoteType);
+}
+
+function menuButton(
+  label: string,
+  icon: CodiconName,
+  action: () => void,
+  disabled = false,
+  accent?: string,
+  checked = false
+): HTMLButtonElement {
+  const button = element('button', `menu-item${checked ? ' checked' : ''}`);
+  button.type = 'button';
+  button.setAttribute('role', 'menuitem');
+  button.disabled = disabled;
+  const marker = element('span', 'menu-item-marker');
+  if (accent) {
+    marker.style.setProperty('--type-color', accent);
+    marker.classList.add('colored');
+  } else {
+    marker.append(codicon(icon));
+  }
+  button.append(marker, elementWithText('span', 'menu-item-label', label));
+  if (checked) {
+    button.append(codicon('check'));
+  }
+  button.addEventListener('click', action);
+  return button;
+}
+
+function wireMenu(menu: HTMLElement, trigger: HTMLElement, close: () => void): void {
+  trigger.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return;
+    }
+    event.preventDefault();
+    menu.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
+    items[event.key === 'ArrowDown' ? 0 : items.length - 1]?.focus();
+  });
+  menu.addEventListener('keydown', (event) => {
+    const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      trigger.focus();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      items[(current + direction + items.length) % items.length]?.focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      items[event.key === 'Home' ? 0 : items.length - 1]?.focus();
+    }
+  });
+}
+
+function openCustomTypeDialog(type: CustomNoteType | undefined, returnFocus: HTMLElement): void {
+  const { overlay, dialog, close } = createDialog(
+    type ? `${t('editType')} · ${type.name}` : t('createCustom'),
+    returnFocus
+  );
+  const form = element('form', 'type-form');
+  const nameLabel = element('label', 'field-label');
+  nameLabel.append(elementWithText('span', '', t('customName')));
+  const name = document.createElement('input');
+  name.type = 'text';
+  name.maxLength = 64;
+  name.required = true;
+  name.value = type?.name ?? '';
+  name.autocomplete = 'off';
+  nameLabel.append(name);
+
+  let colorValue = type?.color ?? '#3478C8';
+  const colorLabel = elementWithText('span', 'field-title', t('customColor'));
+  const palette = element('div', 'color-palette');
+  const freeColor = document.createElement('input');
+  freeColor.type = 'color';
+  freeColor.value = colorValue;
+  freeColor.setAttribute('aria-label', t('customColor'));
+  const hex = document.createElement('input');
+  hex.className = 'hex-input';
+  hex.value = colorValue;
+  hex.maxLength = 7;
+  hex.setAttribute('aria-label', 'Hex color');
+  const preview = element('div', 'type-preview');
+  const error = element('p', 'form-error');
+  error.setAttribute('role', 'alert');
+  const updatePreview = (): void => {
+    try {
+      colorValue = normalizeHexColor(hex.value || freeColor.value);
+      freeColor.value = colorValue;
+      hex.value = colorValue;
+      preview.style.setProperty('--preview-color', colorValue);
+      preview.replaceChildren(
+        element('span', 'preview-dot'),
+        elementWithText('strong', '', name.value.trim() || (state.locale === 'en' ? 'Custom type' : '自定义类型')),
+        elementWithText('span', '', state.locale === 'en' ? 'A quiet semantic accent' : '克制的语义强调色')
+      );
+      error.textContent = '';
+    } catch (caught) {
+      error.textContent = caught instanceof Error ? caught.message : String(caught);
+    }
+  };
+  for (const value of ['#3478C8', '#4B8F68', '#C07A24', '#C9504D', '#7A63B8', '#B04F86', '#397F86', '#6E7781']) {
+    const swatch = element('button', 'color-swatch');
+    swatch.type = 'button';
+    swatch.style.setProperty('--swatch', value);
+    swatch.setAttribute('aria-label', value);
+    swatch.addEventListener('click', () => {
+      hex.value = value;
+      updatePreview();
+    });
+    palette.append(swatch);
+  }
+  const advanced = element('div', 'advanced-color');
+  advanced.append(freeColor, hex);
+  freeColor.addEventListener('input', () => {
+    hex.value = freeColor.value.toUpperCase();
+    updatePreview();
+  });
+  hex.addEventListener('change', updatePreview);
+  name.addEventListener('input', updatePreview);
+
+  const buttons = element('div', 'dialog-actions');
+  buttons.append(
+    actionButton(t('cancel'), 'quiet', close),
+    actionButton(t('saveType'), 'primary', () => undefined)
+  );
+  const submit = buttons.lastElementChild as HTMLButtonElement;
+  submit.type = 'submit';
+  form.append(nameLabel, colorLabel, palette, advanced, preview, error, buttons);
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    try {
+      const trimmed = name.value.trim();
+      const length = Array.from(trimmed).length;
+      if (length < 1 || length > 32 || /\p{Cc}|\p{Cf}/u.test(trimmed)) {
+        throw new Error(state.locale === 'en' ? 'Use a 1–32 character name without control characters.' : '名称需为 1–32 个字符，且不能包含控制字符。');
+      }
+      const duplicate = state.customTypes.some((candidate) =>
+        candidate.id !== type?.id && candidate.name.trim().normalize('NFKC').toLocaleLowerCase() === trimmed.normalize('NFKC').toLocaleLowerCase()
+      );
+      if (duplicate) {
+        throw new Error(state.locale === 'en' ? 'That custom type name is already in use.' : '这个自定义类型名称已经存在。');
+      }
+      colorValue = normalizeHexColor(hex.value);
+      if (type) {
+        vscode.postMessage({ type: 'updateCustomType', customType: { ...type, name: trimmed, color: colorValue } });
+      } else {
+        vscode.postMessage({ type: 'createCustomType', name: trimmed, color: colorValue });
+      }
+      close();
+    } catch (caught) {
+      error.textContent = caught instanceof Error ? caught.message : String(caught);
+    }
+  });
+  dialog.append(form);
+  document.body.append(overlay);
+  updatePreview();
+  focusFirst(dialog);
+}
+
+function openManageTypesDialog(returnFocus: HTMLElement): void {
+  const { overlay, dialog, close } = createDialog(t('manageTypes'), returnFocus, 'wide-dialog');
+  const list = element('div', 'type-manager-list');
+  if (state.customTypes.length === 0) {
+    list.append(elementWithText('p', 'dialog-empty', t('noCustom')));
+  }
+  for (const type of state.customTypes) {
+    const usage = countCustomTypeUsage(state.notes, type.id);
+    const row = element('div', 'type-manager-row');
+    const identity = element('div', 'type-identity');
+    const dot = element('span', 'type-dot');
+    dot.style.setProperty('--type-color', type.color);
+    identity.append(
+      dot,
+      elementWithText('strong', '', type.name),
+      elementWithText('small', '', state.locale === 'en' ? `${usage} item(s)` : `${usage} 个条目`)
+    );
+    row.append(
+      identity,
+      actionButton(t('editType'), 'quiet small', () => {
+        close();
+        openCustomTypeDialog(type, returnFocus);
+      }),
+      iconButton('trash', t('deleteType'), () => {
+        close();
+        openDeleteCustomTypeDialog(type, returnFocus);
+      })
+    );
+    list.append(row);
+  }
+  const actions = element('div', 'dialog-actions');
+  actions.append(
+    actionButton(t('createCustom'), 'quiet', () => {
+      close();
+      openCustomTypeDialog(undefined, returnFocus);
+    }, 'plus'),
+    actionButton(t('close'), 'primary', close)
+  );
+  dialog.append(list, actions);
+  document.body.append(overlay);
+  focusFirst(dialog);
+}
+
+function openDeleteCustomTypeDialog(type: CustomNoteType, returnFocus: HTMLElement): void {
+  const usage = countCustomTypeUsage(state.notes, type.id);
+  if (usage === 0) {
+    vscode.postMessage({ type: 'deleteCustomType', id: type.id });
+    returnFocus.focus();
+    return;
+  }
+  const { overlay, dialog, close } = createDialog(`${t('deleteType')} · ${type.name}`, returnFocus);
+  dialog.append(elementWithText(
+    'p', 'dialog-copy',
+    state.locale === 'en'
+      ? `${usage} item(s) use this type. Choose where they should move; nothing is changed until you confirm.`
+      : `有 ${usage} 个条目正在使用此类型。请先选择替代类型；确认前不会修改任何内容。`
+  ));
+  const selectLabel = element('label', 'field-label');
+  selectLabel.append(elementWithText('span', '', t('replaceWith')));
+  const select = document.createElement('select');
+  select.append(new Option(state.locale === 'en' ? 'Choose a replacement…' : '请选择替代类型…', ''));
+  const builtins = document.createElement('optgroup');
+  builtins.label = state.locale === 'en' ? 'Built-in' : '固定类型';
+  for (const definition of BUILTIN_NOTE_TYPES) {
+    builtins.append(new Option(definition.label[state.locale], `builtin:${definition.id}`));
+  }
+  select.append(builtins);
+  const customs = state.customTypes.filter((candidate) => candidate.id !== type.id);
+  if (customs.length > 0) {
+    const group = document.createElement('optgroup');
+    group.label = t('custom');
+    for (const candidate of customs) {
+      group.append(new Option(candidate.name, `custom:${candidate.id}`));
+    }
+    select.append(group);
+  }
+  selectLabel.append(select);
+  const actions = element('div', 'dialog-actions');
+  const confirm = actionButton(t('deleteType'), 'danger', () => {
+    if (!select.value) {
+      return;
+    }
+    const replacement = select.value.startsWith('custom:')
+      ? { type: 'custom' as const, customTypeId: select.value.slice('custom:'.length) }
+      : { type: select.value.slice('builtin:'.length) as NoteType };
+    vscode.postMessage({ type: 'deleteCustomType', id: type.id, replacement });
+    close();
+  });
+  confirm.disabled = true;
+  select.addEventListener('change', () => { confirm.disabled = !select.value; });
+  actions.append(actionButton(t('cancel'), 'quiet', close), confirm);
+  dialog.append(selectLabel, actions);
+  document.body.append(overlay);
+  focusFirst(dialog);
+}
+
+function openProjectStatusDialog(returnFocus: HTMLElement): void {
+  const { overlay, dialog, close } = createDialog(t('projectStatus'), returnFocus);
+  const status = state.projectStatus;
+  const grid = element('dl', 'status-grid');
+  const add = (label: string, value: string): void => {
+    grid.append(elementWithText('dt', '', label), elementWithText('dd', '', value));
+  };
+  add(state.locale === 'en' ? 'Extension' : '扩展版本', status?.extensionVersion ?? '—');
+  add('JSON schema', String(status?.schemaVersion ?? '—'));
+  add(state.locale === 'en' ? 'Project style' : '项目样式', status?.styleVersion ?? (state.locale === 'en' ? 'Not detected' : '未检测'));
+  add(state.locale === 'en' ? 'Build mode' : '构建模式', status?.buildMode ?? '—');
+  if (status?.styleDetail) {
+    dialog.append(elementWithText('p', `status-message${status.styleCompatible ? ' ok' : ' warning'}`, status.styleDetail));
+  }
+  const actions = element('div', 'dialog-actions');
+  if (status && !status.styleCompatible) {
+    actions.append(actionButton(t('upgradeStyle'), 'quiet', () => {
+      vscode.postMessage({ type: 'upgradeProjectStyle' });
+      close();
+    }));
+  }
+  actions.append(actionButton(t('close'), 'primary', close));
+  dialog.append(grid, actions);
+  document.body.append(overlay);
+  focusFirst(dialog);
+}
+
+function createDialog(title: string, returnFocus: HTMLElement, extraClass = ''): {
+  overlay: HTMLDivElement;
+  dialog: HTMLDivElement;
+  close: () => void;
+} {
+  const overlay = element('div', 'dialog-backdrop');
+  // Avoid PDF.js' global `.dialog` class: its viewer stylesheet injects its
+  // own light/dark variables and can make our Webview dialog text unreadable.
+  const dialog = element('div', `paper-notes-dialog ${extraClass}`.trim());
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  const heading = element('div', 'dialog-heading');
+  const headingId = `dialog-${crypto.randomUUID()}`;
+  const titleNode = elementWithText('h2', '', title);
+  titleNode.id = headingId;
+  dialog.setAttribute('aria-labelledby', headingId);
+  const closeButton = iconButton('close', t('close'), () => close());
+  heading.append(titleNode, closeButton);
+  dialog.append(heading);
+  overlay.append(dialog);
+  let releaseTrap = (): void => undefined;
+  const close = (): void => {
+    releaseTrap();
+    overlay.remove();
+    returnFocus.focus();
+  };
+  overlay.addEventListener('pointerdown', (event) => {
+    if (event.target === overlay) {
+      close();
+    }
+  });
+  releaseTrap = trapDialogFocus(dialog, close);
+  return { overlay, dialog, close };
+}
+
+function styleReady(): boolean {
+  return state.projectStatus?.styleCompatible !== false;
+}
+
+function itemAccent(item: NoteItem): string {
+  const background = getComputedStyle(document.documentElement)
+    .getPropertyValue('--vscode-editor-background')
+    .trim();
+  return typeColor(item.type, item.customTypeId, state.customTypes, /^#[0-9a-f]{6}$/i.test(background) ? background : '#1E1E1E');
 }
 
 function buildPdfWorkspace(): HTMLElement {
@@ -602,16 +1050,16 @@ function buildPdfWorkspace(): HTMLElement {
   searchCount.id = 'pdf-search-count';
   toolbar.append(
     elementWithText('span', 'pdf-kind', tab === 'notesPdf' ? t('compiledNotes') : t('annotatedPdf')),
-    iconButton('‹', t('previousPage'), () => changePdfPage(tab, -1)),
+    iconButton('chevron-left', t('previousPage'), () => changePdfPage(tab, -1)),
     pageControl(tab),
-    iconButton('›', t('nextPage'), () => changePdfPage(tab, 1)),
+    iconButton('arrow-right', t('nextPage'), () => changePdfPage(tab, 1)),
     actionButton('－', 'quiet', () => changePdfScale(tab, -0.15)),
     elementWithText('span', 'zoom-label', `${Math.round(session.scale * 100)}%`),
     actionButton('＋', 'quiet', () => changePdfScale(tab, 0.15)),
     actionButton(t('fitWidth'), 'quiet compact', () => fitPdfWidth(tab)),
     search,
-    iconButton('↑', '上一个搜索结果', () => dispatchPdfSearch(tab, 'again', true)),
-    iconButton('↓', '下一个搜索结果', () => dispatchPdfSearch(tab, 'again', false)),
+    iconButton('arrow-up', '上一个搜索结果', () => dispatchPdfSearch(tab, 'again', true)),
+    iconButton('arrow-down', '下一个搜索结果', () => dispatchPdfSearch(tab, 'again', false)),
     searchCount,
     actionButton(t('reload'), 'quiet', () => {
       const previous = session.document;
@@ -1044,16 +1492,6 @@ function makePdfRoute(tab: PdfTab, destination?: string, noteId?: string): Navig
   };
 }
 
-function pdfViewState(session: PdfSession): PdfViewState {
-  return {
-    page: session.page,
-    scale: session.scale,
-    scrollTop: session.scrollTop,
-    scrollLeft: session.scrollLeft,
-    destination: session.destination
-  };
-}
-
 function navigateToRoute(route: NavigationRoute, push = true, activateDestination = false): void {
   const target = push ? navigation.push(route) : route;
   if (target.noteId) {
@@ -1062,6 +1500,9 @@ function navigateToRoute(route: NavigationRoute, push = true, activateDestinatio
   }
   if (target.surface === 'noteEditor') {
     activeTab = 'notes';
+    if (target.noteId) {
+      mobileDetail = true;
+    }
     vscode.postMessage({ type: 'selectTab', tab: activeTab });
     render();
   } else if (target.surface === 'notesPdf' || target.surface === 'annotatedPdf') {
@@ -1122,6 +1563,7 @@ function persistPanelState(): void {
     currentId: state.currentId,
     searchText,
     typeFilter,
+    mobileDetail,
     pdf: {
       notesPdf: { ...pdfViewState(pdfSessions.notesPdf), searchQuery: pdfSessions.notesPdf.searchQuery },
       annotatedPdf: { ...pdfViewState(pdfSessions.annotatedPdf), searchQuery: pdfSessions.annotatedPdf.searchQuery }
@@ -1148,6 +1590,9 @@ function applyPersistedState(value: unknown): void {
   }
   if (isTypeFilter(persisted.typeFilter)) {
     typeFilter = persisted.typeFilter;
+  }
+  if (typeof persisted.mobileDetail === 'boolean') {
+    mobileDetail = persisted.mobileDetail;
   }
   for (const tab of ['notesPdf', 'annotatedPdf'] as const) {
     const saved = persisted.pdf?.[tab];
@@ -1189,51 +1634,6 @@ function detachPdfViews(): void {
     session.eventBus = undefined;
     session.container = undefined;
   }
-}
-
-function parsePdfPoint(value: unknown): PdfPoint | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-  const point = value as Partial<PdfPoint>;
-  if (!Number.isFinite(point.page) || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
-    return undefined;
-  }
-  return {
-    page: Math.max(1, Math.trunc(point.page ?? 1)),
-    x: Math.max(0, point.x ?? 0),
-    y: Math.max(0, point.y ?? 0),
-    width: Number.isFinite(point.width) ? Math.max(0, point.width ?? 0) : undefined,
-    height: Number.isFinite(point.height) ? Math.max(0, point.height ?? 0) : undefined
-  };
-}
-
-function parseSourcePosition(value: unknown): { file: string; line: number; column: number } | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-  const source = value as { file?: unknown; line?: unknown; column?: unknown };
-  if (typeof source.file !== 'string' || typeof source.line !== 'number' || typeof source.column !== 'number') {
-    return undefined;
-  }
-  return {
-    file: source.file,
-    line: Math.max(0, Math.trunc(source.line)),
-    column: Math.max(0, Math.trunc(source.column))
-  };
-}
-
-function positiveNumber(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-function nonNegativeNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
-}
-
-function isTypeFilter(value: unknown): value is typeof typeFilter {
-  return value === 'all' || value === 'todo-only'
-    || value === 'thought' || value === 'example' || value === 'question' || value === 'todo';
 }
 
 function currentPdfTab(): PdfTab | undefined {
@@ -1324,53 +1724,20 @@ function postBuild(kind: 'quick' | 'full'): void {
   vscode.postMessage({ type: 'build', kind });
 }
 
-function tabButton(tab: PanelTab, label: string, _icon: string): HTMLButtonElement {
+function tabButton(tab: PanelTab, label: string, icon: CodiconName): HTMLButtonElement {
   const button = actionButton(label, `tab${activeTab === tab ? ' active' : ''}`, () => {
     if (tab === 'notes') {
       navigateToRoute({ surface: 'noteEditor', noteId: state.currentId });
     } else {
       navigateToRoute(makePdfRoute(tab, undefined, state.currentId));
     }
-  });
+  }, icon);
   button.setAttribute('aria-selected', String(activeTab === tab));
   return button;
 }
 
-function isPanelTab(value: unknown): value is PanelTab {
-  return value === 'notes' || value === 'notesPdf' || value === 'annotatedPdf';
-}
-
-function parsePdfResource(value: unknown): PdfResource {
-  if (!value || typeof value !== 'object') {
-    return { uri: '', available: false };
-  }
-  const candidate = value as Record<string, unknown>;
-  return {
-    uri: String(candidate.uri ?? ''),
-    available: Boolean(candidate.available)
-  };
-}
-
 function currentNote(): PanelNote | undefined {
   return state.notes.find((note) => note.id === state.currentId) ?? state.notes[0];
-}
-
-function actionButton(label: string, className: string, action: () => void): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.className = `button ${className}`;
-  button.textContent = label;
-  button.addEventListener('click', action);
-  return button;
-}
-
-function iconButton(label: string, title: string, action: () => void): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.className = 'icon-button';
-  button.textContent = label;
-  button.title = title;
-  button.setAttribute('aria-label', title);
-  button.addEventListener('click', action);
-  return button;
 }
 
 function wrapSelection(textarea: HTMLTextAreaElement, before: string, after: string, placeholder: string): void {
@@ -1396,8 +1763,8 @@ function insertAtActiveTextarea(text: string): void {
   insertText(activeTextarea, text);
 }
 
-function typeLabel(type: NoteType): string {
-  return t(type);
+function typeLabel(type: NoteType, customTypeId?: string): string {
+  return registeredTypeLabel(type, customTypeId, state.customTypes, state.locale);
 }
 
 function shortDate(value: string): string {
@@ -1435,28 +1802,6 @@ function toast(message: string, error = false): void {
   item.textContent = message;
   region.append(item);
   window.setTimeout(() => item.remove(), 5000);
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = ''): HTMLElementTagNameMap[K] {
-  const result = document.createElement(tag);
-  if (className) {
-    result.className = className;
-  }
-  return result;
-}
-
-function elementWithText<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text: string): HTMLElementTagNameMap[K] {
-  const result = element(tag, className);
-  result.textContent = text;
-  return result;
-}
-
-function mustElement(id: string): HTMLElement {
-  const result = document.getElementById(id);
-  if (!result) {
-    throw new Error(`Missing #${id}`);
-  }
-  return result;
 }
 
 function escapeHtml(value: string): string {
