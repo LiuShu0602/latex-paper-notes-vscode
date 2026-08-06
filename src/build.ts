@@ -201,10 +201,18 @@ export class BuildManager implements vscode.Disposable {
     const report = await this.diagnose();
     for (const check of report.checks) {
       const status = check.ok ? '[OK]' : check.required ? '[MISSING]' : '[OPTIONAL]';
-      this.output.appendLine(`${status} ${check.name}: ${check.detail}`);
+      const line = `${status} ${check.name}: ${check.detail}`;
+      this.output.appendLine(line);
+      if (process.env.PAPER_NOTES_TEST_LOG === '1') {
+        console.error(`[LaTeX Paper Notes] ${line}`);
+      }
     }
     for (const warning of report.warnings) {
-      this.output.appendLine(`[WARNING] ${warning}`);
+      const line = `[WARNING] ${warning}`;
+      this.output.appendLine(line);
+      if (process.env.PAPER_NOTES_TEST_LOG === '1') {
+        console.error(`[LaTeX Paper Notes] ${line}`);
+      }
     }
     if (!report.ready) {
       throw new Error(`The LaTeX toolchain is incomplete (${report.distributionDetail}). Run “Paper Notes: Project Diagnostics” for installation hints.`);
