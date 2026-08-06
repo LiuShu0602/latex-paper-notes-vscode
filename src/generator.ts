@@ -3,6 +3,7 @@ import { escapeLatexText, markdownExcerptToLatex, markdownToLatex } from './mark
 import { latexToPlainText, nearestSectionTitle, scanMarkers, type MarkerRange } from './markers.js';
 import { buildSourceSelector } from './source-selector.js';
 import { maskCommentsAndVerbatim, parseLatexDependencies } from './project.js';
+import { pdfReadableColor } from './note-types.js';
 
 export interface GeneratedNotes {
   json: string;
@@ -75,10 +76,10 @@ export function synchronizeAndGenerate(data: PaperNotesData, sourcesValue: Proje
 
   const json = `${JSON.stringify(synchronized, null, 2)}\n`;
   const hash = hashText(json);
-  return { json, hash, data: synchronized, tex: renderNotesTex(synchronized.notes, hash) };
+  return { json, hash, data: synchronized, tex: renderNotesTex(synchronized, hash) };
 }
 
-export function renderNotesTex(notes: PaperNote[], dataHash: string): string {
+export function renderNotesTex(data: PaperNotesData, dataHash: string): string {
   const lines: string[] = [
     '% !TeX root = paper_notes.tex',
     '% !TeX program = latexmk',
@@ -89,8 +90,17 @@ export function renderNotesTex(notes: PaperNote[], dataHash: string): string {
     ''
   ];
 
+  for (const customType of data.customTypes) {
+    lines.push(
+      `\\DeclarePaperNoteCustomType{${customType.id}}{${escapeLatexText(customType.name)}}{${customType.color.slice(1)}}{${pdfReadableColor(customType.color).slice(1)}}`
+    );
+  }
+  if (data.customTypes.length > 0) {
+    lines.push('');
+  }
+
   let currentSection = '';
-  for (const note of notes) {
+  for (const note of data.notes) {
     if (note.sectionTitle !== currentSection) {
       currentSection = note.sectionTitle || 'Main Paper';
       lines.push(`\\section{${escapeLatexText(currentSection)}}`, '');
@@ -104,7 +114,11 @@ export function renderNotesTex(notes: PaperNote[], dataHash: string): string {
     }
     for (const item of note.items) {
       const body = item.format === 'latex-legacy' ? item.content.trim() : markdownToLatex(item.content);
-      lines.push(`\\NoteItem{${item.type}}{`, body, '}', '');
+      if (item.type === 'custom') {
+        lines.push(`\\CustomNoteItem{${item.customTypeId}}{`, body, '}', '');
+      } else {
+        lines.push(`\\NoteItem{${item.type}}{`, body, '}', '');
+      }
     }
     if (note.legacyPostlude?.trim()) {
       lines.push(note.legacyPostlude.trim(), '');

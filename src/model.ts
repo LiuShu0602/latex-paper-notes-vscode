@@ -1,7 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { posix, win32 } from 'node:path';
+import {
+  assertValidCustomTypes,
+  ensureUniqueCustomTypeName,
+  isNoteType,
+  normalizeHexColor,
+  type CustomNoteType,
+  type NoteType
+} from './note-types.js';
 
-export type NoteType = 'thought' | 'example' | 'question' | 'todo';
+export type { BuiltinNoteType, CustomNoteType, NoteType } from './note-types.js';
 export type NoteFormat = 'markdown' | 'latex-legacy';
 export type ExcerptMode = 'auto' | 'manual';
 export type PaperEngine = 'pdflatex' | 'xelatex' | 'lualatex';
@@ -11,6 +19,7 @@ export type BuildMode = 'builtin' | 'legacy-script';
 export interface NoteItem {
   id: string;
   type: NoteType;
+  customTypeId?: string;
   format: NoteFormat;
   content: string;
 }
@@ -64,8 +73,9 @@ export interface PaperNotesProject {
 }
 
 export interface PaperNotesData {
-  schemaVersion: 3;
+  schemaVersion: 4;
   project: PaperNotesProject;
+  customTypes: CustomNoteType[];
   notes: PaperNote[];
 }
 
@@ -89,7 +99,6 @@ export const DEFAULT_PROJECT: PaperNotesProject = {
   build: { mode: 'builtin' }
 };
 
-const noteTypes = new Set<NoteType>(['thought', 'example', 'question', 'todo']);
 const noteFormats = new Set<NoteFormat>(['markdown', 'latex-legacy']);
 const paperEngines = new Set<PaperEngine>(['pdflatex', 'xelatex', 'lualatex']);
 const notesEngines = new Set<NotesEngine>(['xelatex', 'lualatex']);
@@ -98,8 +107,49 @@ export function hashText(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-export function createNoteItem(type: NoteType = 'thought', content = ''): NoteItem {
-  return { id: randomUUID(), type, format: 'markdown', content };
+export function createNoteItem(type: NoteType = 'thought', content = '', customTypeId?: string): NoteItem {
+  return {
+    id: randomUUID(),
+    type,
+    ...(type === 'custom' && customTypeId ? { customTypeId } : {}),
+    format: 'markdown',
+    content
+  };
+}
+
+export function createCustomNoteType(
+  existing: readonly CustomNoteType[],
+  nameValue: string,
+  colorValue: string,
+  now = new Date().toISOString(),
+  id = randomUUID()
+): CustomNoteType {
+  return {
+    id,
+    name: ensureUniqueCustomTypeName(existing, nameValue),
+    color: normalizeHexColor(colorValue),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+export function updateCustomNoteType(
+  existing: readonly CustomNoteType[],
+  id: string,
+  nameValue: string,
+  colorValue: string,
+  now = new Date().toISOString()
+): CustomNoteType {
+  const current = existing.find((candidate) => candidate.id === id);
+  if (!current) {
+    throw new Error(`Custom note type ${id} no longer exists.`);
+  }
+  return {
+    ...current,
+    name: ensureUniqueCustomTypeName(existing, nameValue, id),
+    color: normalizeHexColor(colorValue),
+    updatedAt: now
+  };
 }
 
 export function createEmptyData(project: Partial<PaperNotesProject> = {}): PaperNotesData {
@@ -111,7 +161,7 @@ export function createEmptyData(project: Partial<PaperNotesProject> = {}): Paper
   if (!project.sourceFiles) {
     merged.sourceFiles = [merged.rootFile];
   }
-  return { schemaVersion: 3, project: merged, notes: [] };
+  return { schemaVersion: 4, project: merged, customTypes: [], notes: [] };
 }
 
 export function noteLabel(id: string): string {
@@ -122,7 +172,7 @@ export function paperLabel(id: string): string {
   return `pnote.main.${id}`;
 }
 
-/** Convert a project path to the only on-disk representation accepted by schema v3. */
+/** Convert a project path to the only on-disk representation accepted by schema v4. */
 export function normalizeRelativePosixPath(value: string, label = 'path'): string {
   const trimmed = value.trim().replace(/\\/g, '/');
   if (!trimmed || trimmed.includes('\0') || posix.isAbsolute(trimmed) || win32.isAbsolute(trimmed)) {
@@ -140,10 +190,12 @@ export function assertValidData(value: unknown): asserts value is PaperNotesData
     throw new Error('Paper Notes data must be a JSON object.');
   }
   const data = value as Partial<PaperNotesData>;
-  if (data.schemaVersion !== 3 || !data.project || !Array.isArray(data.notes)) {
+  if (data.schemaVersion !== 4 || !data.project || !Array.isArray(data.customTypes) || !Array.isArray(data.notes)) {
     throw new Error('Unsupported Paper Notes schema or missing project/notes.');
   }
   assertValidProject(data.project);
+  assertValidCustomTypes(data.customTypes);
+  const customTypeIds = new Set(data.customTypes.map((type) => type.id));
 
   const ids = new Set<string>();
   for (const candidate of data.notes) {
@@ -169,8 +221,16 @@ export function assertValidData(value: unknown): asserts value is PaperNotesData
       throw new Error(`Note ${note.id} has an invalid revision.`);
     }
     for (const item of note.items) {
-      if (!item || typeof item.id !== 'string' || !noteTypes.has(item.type) || !noteFormats.has(item.format)) {
+      if (!item || typeof item.id !== 'string' || !isNoteType(item.type) || !noteFormats.has(item.format)
+        || typeof item.content !== 'string') {
         throw new Error(`Note ${note.id} contains an invalid item.`);
+      }
+      if (item.type === 'custom') {
+        if (typeof item.customTypeId !== 'string' || !customTypeIds.has(item.customTypeId)) {
+          throw new Error(`Note ${note.id} contains a custom item whose type no longer exists.`);
+        }
+      } else if (item.customTypeId !== undefined) {
+        throw new Error(`Note ${note.id} contains a built-in item with an unexpected customTypeId.`);
       }
     }
   }
@@ -213,12 +273,23 @@ export function migratePaperNotesData(value: unknown, options: MigrationOptions 
     throw new Error('Paper Notes data must be a JSON object.');
   }
   const input = structuredClone(value) as Record<string, unknown>;
-  if (input.schemaVersion === 3) {
+  if (input.schemaVersion === 4) {
     assertValidData(input);
     return { data: input, migrated: false };
   }
-  if ((input.schemaVersion !== 1 && input.schemaVersion !== 2) || !input.project || !Array.isArray(input.notes)) {
+  if ((input.schemaVersion !== 1 && input.schemaVersion !== 2 && input.schemaVersion !== 3)
+    || !input.project || !Array.isArray(input.notes)) {
     throw new Error('Unsupported Paper Notes schema or missing project/notes.');
+  }
+
+  if (input.schemaVersion === 3) {
+    const migrated = {
+      ...input,
+      schemaVersion: 4,
+      customTypes: []
+    } as unknown as PaperNotesData;
+    assertValidData(migrated);
+    return { data: migrated, migrated: true };
   }
 
   const legacyProject = input.project as Record<string, unknown>;
@@ -280,7 +351,7 @@ export function migratePaperNotesData(value: unknown, options: MigrationOptions 
       fullScript: normalizeRelativePosixPath(fullScript)
     }
   };
-  const migrated: PaperNotesData = { schemaVersion: 3, project, notes };
+  const migrated: PaperNotesData = { schemaVersion: 4, project, customTypes: [], notes };
   assertValidData(migrated);
   return { data: migrated, migrated: true };
 }

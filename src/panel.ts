@@ -1,16 +1,21 @@
 import { stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import * as vscode from 'vscode';
-import type { PaperNote } from './model.js';
+import type { CustomNoteType, NoteType, PaperNote } from './model.js';
 import type { PaperNotesStore } from './store.js';
 import { scanMarkers } from './markers.js';
 import type { BuildRequestOrigin } from './build-policy.js';
+import { inspectProjectStyle } from './style-upgrade.js';
 
 export interface PanelActions {
   selectNote(id: string): Promise<void>;
   selectSourcePosition(source: { file: string; line: number; column: number }): Promise<void>;
   reverseSync(page: number, x: number, y: number): Promise<void>;
   saveNote(note: PaperNote): Promise<void>;
+  createCustomType(input: { name: string; color: string }): Promise<void>;
+  updateCustomType(input: CustomNoteType): Promise<void>;
+  deleteCustomType(id: string, replacement?: { type: NoteType; customTypeId?: string }): Promise<void>;
+  upgradeProjectStyle(force?: boolean): Promise<void>;
   deleteNote(id: string): Promise<void>;
   build(kind: 'quick' | 'full', origin?: BuildRequestOrigin): Promise<void>;
   validate(): Promise<boolean>;
@@ -24,6 +29,11 @@ interface IncomingMessage {
   token?: string;
   id?: string;
   note?: PaperNote;
+  customType?: CustomNoteType;
+  name?: string;
+  color?: string;
+  replacement?: { type?: NoteType; customTypeId?: string };
+  force?: boolean;
   kind?: 'quick' | 'full';
   tab?: PanelTab;
   url?: string;
@@ -52,6 +62,7 @@ export class NotesPanel implements vscode.Disposable {
     private readonly annotatedPdfRelative: () => string,
     private readonly notesPdfRelative: () => string,
     private readonly workspaceState: vscode.Memento,
+    private readonly extensionVersion: string,
     private readonly actions: PanelActions
   ) {
     this.persistedState = workspaceState.get('paperNotes.panelState');
@@ -201,18 +212,30 @@ export class NotesPanel implements vscode.Disposable {
 
     const annotatedPdf = await this.pdfResource(this.annotatedPdfRelative());
     const notesPdf = await this.pdfResource(this.notesPdfRelative());
+    const styleStatus = await inspectProjectStyle(this.workspaceRoot, this.store.project);
     const workerUri = this.panel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'dist', 'pdf.worker.min.mjs')).toString();
     await this.post({
       type: 'state',
       tab,
       currentId: this.currentId,
       notes,
+      customTypes: this.store.data.customTypes,
       markerProblems,
       annotatedPdf,
       notesPdf,
       workerUri,
       locale: vscode.env.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en',
       project: this.store.project,
+      projectStatus: {
+        extensionVersion: this.extensionVersion,
+        schemaVersion: this.store.data.schemaVersion,
+        styleVersion: styleStatus.installedVersion,
+        expectedStyleVersion: styleStatus.expectedVersion,
+        styleCompatible: styleStatus.compatible,
+        styleKind: styleStatus.kind,
+        styleDetail: styleStatus.detail,
+        buildMode: this.store.project.build.mode
+      },
       assetBaseUri: `${this.panel.webview.asWebviewUri(vscode.Uri.file(resolve(this.workspaceRoot, this.store.project.notesDir))).toString()}/`,
       restoredState: this.persistedState
     });
@@ -289,6 +312,31 @@ export class NotesPanel implements vscode.Disposable {
             await this.actions.saveNote(message.note);
             await this.notifySaved(message.note.id);
           }
+          break;
+        case 'createCustomType':
+          if (typeof message.name === 'string' && typeof message.color === 'string') {
+            await this.actions.createCustomType({ name: message.name, color: message.color });
+            await this.sendState(this.currentTab);
+          }
+          break;
+        case 'updateCustomType':
+          if (message.customType) {
+            await this.actions.updateCustomType(message.customType);
+            await this.sendState(this.currentTab);
+          }
+          break;
+        case 'deleteCustomType':
+          if (message.id) {
+            const replacement = message.replacement?.type
+              ? { type: message.replacement.type, customTypeId: message.replacement.customTypeId }
+              : undefined;
+            await this.actions.deleteCustomType(message.id, replacement);
+            await this.sendState(this.currentTab);
+          }
+          break;
+        case 'upgradeProjectStyle':
+          await this.actions.upgradeProjectStyle(Boolean(message.force));
+          await this.sendState(this.currentTab);
           break;
         case 'flushComplete':
           if (message.token) {

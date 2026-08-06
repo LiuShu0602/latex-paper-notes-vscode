@@ -8,7 +8,9 @@ import {
   normalizeRelativePosixPath,
   type PaperNote,
   type PaperNotesData,
-  type PaperNotesProject
+  type PaperNotesProject,
+  type CustomNoteType,
+  type NoteType
 } from './model.js';
 import { synchronizeAndGenerate, type ProjectSources } from './generator.js';
 import { scanMarkers } from './markers.js';
@@ -19,7 +21,8 @@ export interface StorePaths {
   legacyRootFile?: string;
   legacyGeneratedNotesFile?: string;
   legacyBackupFile: string;
-  schemaBackupFile: string;
+  /** Optional override retained for embedders; defaults to a schema-numbered backup. */
+  schemaBackupFile?: string;
   legacyQuickScript?: string;
   legacyFullScript?: string;
 }
@@ -54,7 +57,8 @@ export class PaperNotesStore {
     }
     const raw = await readFile(dataPath, 'utf8');
     const parsed = JSON.parse(stripBom(raw)) as Record<string, unknown>;
-    const markerOwners = parsed.schemaVersion === 3 ? undefined : await this.findLegacyMarkerOwners(parsed);
+    const sourceSchema = Number(parsed.schemaVersion);
+    const markerOwners = sourceSchema >= 3 ? undefined : await this.findLegacyMarkerOwners(parsed);
     const migration = migratePaperNotesData(parsed, {
       legacyRootFile: this.paths.legacyRootFile,
       markerOwners,
@@ -64,7 +68,7 @@ export class PaperNotesStore {
     await this.assertProjectSafe(migration.data.project);
     this.currentData = migration.data;
     if (migration.migrated) {
-      await this.backupPreviousSchema(raw);
+      await this.backupPreviousSchema(raw, sourceSchema);
       await this.save(migration.data);
     } else {
       // Regenerate only when the generated file is missing. Activation should
@@ -87,7 +91,9 @@ export class PaperNotesStore {
     await this.flush();
     const dataPath = this.absolute(this.paths.dataFile);
     const raw = await readFile(dataPath, 'utf8');
-    const migration = migratePaperNotesData(JSON.parse(stripBom(raw)), {
+    const parsed = JSON.parse(stripBom(raw)) as Record<string, unknown>;
+    const sourceSchema = Number(parsed.schemaVersion);
+    const migration = migratePaperNotesData(parsed, {
       legacyRootFile: this.paths.legacyRootFile,
       legacyQuickScript: this.paths.legacyQuickScript,
       legacyFullScript: this.paths.legacyFullScript
@@ -95,7 +101,7 @@ export class PaperNotesStore {
     await this.assertProjectSafe(migration.data.project);
     this.currentData = migration.data;
     if (migration.migrated) {
-      await this.backupPreviousSchema(raw);
+      await this.backupPreviousSchema(raw, sourceSchema);
       return this.save(migration.data);
     }
     return migration.data;
@@ -168,6 +174,53 @@ export class PaperNotesStore {
     return this.save(next);
   }
 
+  async addCustomType(type: CustomNoteType): Promise<PaperNotesData> {
+    const next = structuredClone(this.data);
+    next.customTypes.push(type);
+    return this.save(next);
+  }
+
+  async updateCustomType(type: CustomNoteType): Promise<PaperNotesData> {
+    const next = structuredClone(this.data);
+    const index = next.customTypes.findIndex((candidate) => candidate.id === type.id);
+    if (index < 0) {
+      throw new Error(`Custom note type ${type.id} no longer exists.`);
+    }
+    next.customTypes[index] = type;
+    return this.save(next);
+  }
+
+  async deleteCustomType(
+    id: string,
+    replacement?: { type: NoteType; customTypeId?: string }
+  ): Promise<PaperNotesData> {
+    const next = structuredClone(this.data);
+    if (!next.customTypes.some((candidate) => candidate.id === id)) {
+      throw new Error(`Custom note type ${id} no longer exists.`);
+    }
+    const usedItems = next.notes.flatMap((note) => note.items).filter(
+      (item) => item.type === 'custom' && item.customTypeId === id
+    );
+    if (usedItems.length > 0 && !replacement) {
+      throw new Error(`This custom note type is used by ${usedItems.length} item(s); choose a replacement first.`);
+    }
+    if (replacement?.type === 'custom'
+      && (!replacement.customTypeId || replacement.customTypeId === id
+        || !next.customTypes.some((candidate) => candidate.id === replacement.customTypeId))) {
+      throw new Error('The replacement custom note type is invalid.');
+    }
+    for (const item of usedItems) {
+      item.type = replacement!.type;
+      if (replacement!.type === 'custom') {
+        item.customTypeId = replacement!.customTypeId;
+      } else {
+        delete item.customTypeId;
+      }
+    }
+    next.customTypes = next.customTypes.filter((candidate) => candidate.id !== id);
+    return this.save(next);
+  }
+
   async readSources(sourceFiles = this.project.sourceFiles): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     for (const sourceFile of sourceFiles) {
@@ -237,8 +290,14 @@ export class PaperNotesStore {
     return owners;
   }
 
-  private async backupPreviousSchema(raw: string): Promise<void> {
-    const backupPath = this.absolute(this.paths.schemaBackupFile);
+  private async backupPreviousSchema(raw: string, sourceSchema: number): Promise<void> {
+    const fallbackSchema = Number.isInteger(sourceSchema) && sourceSchema > 0 ? sourceSchema : 0;
+    const dataDirectory = this.paths.dataFile.includes('/')
+      ? this.paths.dataFile.slice(0, this.paths.dataFile.lastIndexOf('/'))
+      : '.';
+    const backupRelative = this.paths.schemaBackupFile
+      ?? `${dataDirectory === '.' ? '' : `${dataDirectory}/`}legacy/paper-notes.schema${fallbackSchema}.bak.json`;
+    const backupPath = this.absolute(backupRelative);
     if (!(await exists(backupPath))) {
       await atomicWrite(backupPath, raw);
     }
@@ -251,7 +310,7 @@ export function defaultStorePaths(overrides: Partial<StorePaths> = {}): StorePat
     legacyRootFile: undefined,
     legacyGeneratedNotesFile: 'notes/main_notes.tex',
     legacyBackupFile: 'notes/legacy/main_notes.pre-app.tex',
-    schemaBackupFile: 'notes/legacy/paper-notes.schema2.bak.json',
+    schemaBackupFile: undefined,
     legacyQuickScript: 'notes/build_main_notes_preview.ps1',
     legacyFullScript: 'notes/build_notes.ps1',
     ...overrides

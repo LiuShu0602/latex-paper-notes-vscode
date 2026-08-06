@@ -6,6 +6,7 @@ import { resolveInsideProject, type SourceGraph } from './project.js';
 
 export const INTEGRATION_BEGIN = '% >>> LaTeX Paper Notes integration >>>';
 export const INTEGRATION_END = '% <<< LaTeX Paper Notes integration <<<';
+export const PROJECT_STYLE_VERSION = '0.4.0-beta.1';
 
 export interface InitializationOptions {
   rootFile: string;
@@ -53,8 +54,8 @@ export async function planInitialization(workspaceRoot: string, options: Initial
     [`${notesDir}/paper-notes-style.sty`, { content: renderNotesStylePackage(notesDir), description: 'Standalone notes PDF style' }],
     [project.annotatedWrapper, { content: renderAnnotatedWrapper(project), description: 'Annotated-paper wrapper' }],
     [`${notesDir}/paper_notes.tex`, { content: renderNotesRoot(project), description: 'Standalone notes PDF root' }],
-    [project.generatedNotesFile, { content: renderEmptyGeneratedNotes(), description: 'Generated structured-note fragment' }],
-    [`${notesDir}/paper-notes.json`, { content: `${JSON.stringify(createEmptyData(project), null, 2)}\n`, description: 'Structured note data (schema v3)' }],
+    [project.generatedNotesFile, { content: renderEmptyGeneratedNotes(project), description: 'Generated structured-note fragment' }],
+    [`${notesDir}/paper-notes.json`, { content: `${JSON.stringify(createEmptyData(project), null, 2)}\n`, description: 'Structured note data (schema v4)' }],
     [`${notesDir}/README.md`, { content: renderProjectReadme(), description: 'Project-local usage and recovery guide' }]
   ]);
   const ignorePath = '.gitignore';
@@ -165,7 +166,7 @@ export function upsertIntegrationBlock(source: string, block: string): string {
 
 export function renderPaperIntegrationPackage(project: PaperNotesProject): string {
   return String.raw`\NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{${project.notesDir}/paper-notes-paper}[2026/08/06 v0.3.2 LaTeX Paper Notes integration]
+\ProvidesPackage{${project.notesDir}/paper-notes-paper}[2026/08/06 v${PROJECT_STYLE_VERSION} LaTeX Paper Notes integration]
 \RequirePackage{xcolor}
 \ifdefined\PaperNotesDraft
   \RequirePackage{xr-hyper}
@@ -227,8 +228,10 @@ export function renderNotesRoot(project: PaperNotesProject): string {
 }
 
 export function renderNotesStylePackage(notesDir = 'notes'): string {
-  return String.raw`\NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{${notesDir}/paper-notes-style}[2026/08/06 v0.3.2 Companion paper notes]
+  const template = String.raw`\NeedsTeXFormat{LaTeX2e}
+% LaTeX Paper Notes project-style-version: ${PROJECT_STYLE_VERSION}
+% LaTeX Paper Notes template-sha256: __PAPER_NOTES_TEMPLATE_HASH__
+\ProvidesPackage{${notesDir}/paper-notes-style}[2026/08/06 v${PROJECT_STYLE_VERSION} Companion paper notes]
 \RequirePackage{etoolbox}
 \RequirePackage{xparse}
 \RequirePackage[most]{tcolorbox}
@@ -236,18 +239,19 @@ export function renderNotesStylePackage(notesDir = 'notes'): string {
 \makeindex[name=notetypes,title={Note types / 按类型索引},columns=1,intoc]
 \definecolor{PNThought}{HTML}{2563A5}
 \definecolor{PNExample}{HTML}{2E7D32}
-\definecolor{PNQuestion}{HTML}{B26A00}
-\definecolor{PNTodo}{HTML}{B3261E}
+\definecolor{PNQuestion}{HTML}{9A5700}
+\definecolor{PNTodo}{HTML}{A52D27}
+\definecolor{PNTranslation}{HTML}{60428F}
 \definecolor{PNFrame}{HTML}{607D8B}
 \newcounter{papernote}[section]
 \renewcommand{\thepapernote}{\thesection.\arabic{papernote}}
 \makeatletter
 \newcommand{\PN@writeindex}[1]{\index[notetypes]{#1}}
 \newcommand{\PN@renderitem}[4]{%
-  \edef\PN@indexentry{#1@#2!note-\thepapernote @Note\space\thepapernote}%
+  \edef\PN@indexentry{#1!note-\thepapernote @Note\space\thepapernote}%
   \expandafter\PN@writeindex\expandafter{\PN@indexentry}%
   \par\medskip\noindent
-  \tcbox[on line,colback=#3!10,colframe=#3,boxrule=.5pt,arc=1mm,boxsep=1pt,left=3pt,right=3pt,top=1pt,bottom=1pt]{\textcolor{#3}{\bfseries #2}}\hspace{.5em}#4\par}
+  \tcbox[on line,colback=#3!8,colframe=#3,boxrule=.5pt,arc=1mm,boxsep=1pt,left=3pt,right=3pt,top=1pt,bottom=1pt]{\textcolor{#3}{\bfseries #2}}\hspace{.5em}#4\par}
 \NewDocumentEnvironment{PaperNote}{m m m}{%
   \refstepcounter{papernote}%
   \Hy@raisedlink{\hyper@anchorstart{note.#1.#2}\hyper@anchorend}%
@@ -262,19 +266,46 @@ export function renderNotesStylePackage(notesDir = 'notes'): string {
 \NewDocumentCommand{\SourceExcerpt}{+m}{\begin{tcolorbox}[colback=black!3,colframe=black!25,boxrule=.4pt,arc=1mm]\textbf{Excerpt / 原文摘录:}\enspace\emph{#1}\end{tcolorbox}}
 \NewDocumentCommand{\NoteHeading}{m}{\par\medskip\noindent\textcolor{PNFrame}{\bfseries #1}\par\smallskip}
 \NewDocumentCommand{\NoteItem}{m +m}{%
-  \ifstrequal{#1}{thought}{\PN@renderitem{1-thought}{Thought / 感想}{PNThought}{#2}}{%
-  \ifstrequal{#1}{example}{\PN@renderitem{2-example}{Example / 例子}{PNExample}{#2}}{%
-  \ifstrequal{#1}{question}{\PN@renderitem{3-question}{Question / 疑问}{PNQuestion}{#2}}{%
-  \ifstrequal{#1}{todo}{\PN@renderitem{4-todo}{To revise / 待修改}{PNTodo}{#2}}{\PackageError{paper-notes-style}{Unknown note type '#1'}{Use thought, example, question, or todo.}}}}}}
+  \ifstrequal{#1}{thought}{\PN@renderitem{1-thought@Thought / 感想}{Thought / 感想}{PNThought}{#2}}{%
+  \ifstrequal{#1}{example}{\PN@renderitem{2-example@Example / 例子}{Example / 例子}{PNExample}{#2}}{%
+  \ifstrequal{#1}{question}{\PN@renderitem{3-question@Question / 疑问}{Question / 疑问}{PNQuestion}{#2}}{%
+  \ifstrequal{#1}{todo}{\PN@renderitem{4-todo@To revise / 待修改}{To revise / 待修改}{PNTodo}{#2}}{%
+  \ifstrequal{#1}{translation}{\PN@renderitem{5-translation@Translation / 翻译}{Translation / 翻译}{PNTranslation}{#2}}{\PackageError{paper-notes-style}{Unknown note type '#1'}{Use a built-in note type or CustomNoteItem.}}}}}}}
+\ExplSyntaxOn
+\prop_new:N \g_pn_custom_label_prop
+\cs_new_protected:Npn \pn_declare_custom:nnnn #1#2#3#4
+  {
+    \definecolor{PNCustomBase#1}{HTML}{#3}
+    \definecolor{PNCustom#1}{HTML}{#4}
+    \prop_gput:Nnn \g_pn_custom_label_prop {#1} {#2}
+  }
+\NewDocumentCommand{\PNCustomIndexLabel}{m}{\prop_item:Nn \g_pn_custom_label_prop {#1}}
+\cs_new_protected:Npn \pn_render_custom:nn #1#2
+  {
+    \prop_get:NnNTF \g_pn_custom_label_prop {#1} \l_tmpa_tl
+      {
+        \PN@renderitem
+          {6-custom@Custom~/~自定义!custom-#1@\noexpand\PNCustomIndexLabel{#1}}
+          {\tl_use:N \l_tmpa_tl}
+          {PNCustom#1}
+          {#2}
+      }
+      {\PackageError{paper-notes-style}{Unknown custom note type '#1'}{Regenerate main_notes.tex from paper-notes.json.}}
+  }
+\NewDocumentCommand{\DeclarePaperNoteCustomType}{m m m m}{\pn_declare_custom:nnnn{#1}{#2}{#3}{#4}}
+\NewDocumentCommand{\CustomNoteItem}{m +m}{\pn_render_custom:nn{#1}{#2}}
+\ExplSyntaxOff
 \NewDocumentCommand{\PaperRef}{m m m}{\hyperref[#1-#2]{#3}}
 \NewDocumentCommand{\NoteRef}{m m}{\hyperref[note:#1]{#2}}
 \NewDocumentCommand{\PrintNoteTypeIndex}{}{\printindex[notetypes]}
 \makeatother
 `;
+  const templateHash = hashText(template);
+  return template.replace('__PAPER_NOTES_TEMPLATE_HASH__', templateHash);
 }
 
-function renderEmptyGeneratedNotes(): string {
-  const data = createEmptyData();
+function renderEmptyGeneratedNotes(project: PaperNotesProject): string {
+  const data = createEmptyData(project);
   const hash = hashText(`${JSON.stringify(data, null, 2)}\n`);
   return `% !TeX root = paper_notes.tex\n% AUTO-GENERATED BY LaTeX Paper Notes; data-sha256=${hash}\n% Edit notes in the VS Code Paper Notes panel.\n\\part{Main paper notes / 主文笔记}\n`;
 }

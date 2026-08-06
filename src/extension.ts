@@ -1,22 +1,33 @@
 import { constants } from 'node:fs';
-import { access, copyFile, mkdir, readFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path';
 import * as vscode from 'vscode';
 import { BuildManager, defaultExecutables, type BuildKind, type BuildResult } from './build.js';
 import { prepareBuild, type BuildRequestOrigin } from './build-policy.js';
 import { DebouncedAction } from './debounce.js';
-import { integrationBlock, planInitialization, applyInitializationPlan, rollbackInitializationPlan, upsertIntegrationBlock } from './initializer.js';
+import {
+  integrationBlock,
+  planInitialization,
+  applyInitializationPlan,
+  renderNotesStylePackage,
+  rollbackInitializationPlan,
+  upsertIntegrationBlock
+} from './initializer.js';
 import { containsRawHtml } from './markdown.js';
 import {
   createNoteItem,
+  createCustomNoteType,
   hashText,
   isValidSemanticId,
   normalizeRelativePosixPath,
+  updateCustomNoteType,
+  type CustomNoteType,
   type NoteFormat,
   type NoteType,
   type PaperEngine,
   type PaperNote
 } from './model.js';
+import { isNoteType } from './note-types.js';
 import {
   generateSemanticId,
   latexToPlainText,
@@ -35,6 +46,7 @@ import {
 import { buildSourceSelector, findRelinkCandidates } from './source-selector.js';
 import { defaultStorePaths, PaperNotesStore } from './store.js';
 import { SyncTeXService } from './synctex.js';
+import { inspectProjectStyle, upgradeProjectStyle } from './style-upgrade.js';
 
 let application: PaperNotesApplication | undefined;
 
@@ -102,6 +114,7 @@ class PaperNotesApplication implements vscode.Disposable {
       command('paperNotes.projectDoctor', () => this.projectDoctor()),
       command('paperNotes.rescanSources', () => this.requireController().rescanSources(true)),
       command('paperNotes.repairIntegration', () => this.requireController().repairIntegration()),
+      command('paperNotes.upgradeProjectFiles', () => this.requireController().upgradeProjectStyle()),
       command('paperNotes.openPanel', async (id) => {
         const controller = this.controllerForActive();
         if (!controller) {
@@ -249,12 +262,21 @@ class PaperNotesApplication implements vscode.Disposable {
     }));
     try {
       const initialized = await store.initialize();
+      const style = await inspectProjectStyle(folder.uri.fsPath, store.project);
+      if (style.kind === 'stock-old') {
+        const upgraded = await upgradeProjectStyle(folder.uri.fsPath, store.project);
+        if (upgraded.upgraded) {
+          void vscode.window.showInformationMessage(
+            `Paper Notes project style upgraded to v${upgraded.status.expectedVersion}. Backup: ${upgraded.backupFile}`
+          );
+        }
+      }
       const controller = new PaperNotesController(this.context, folder, store);
       controller.register();
       this.controllers.set(folder.uri.fsPath.toLowerCase(), controller);
       await controller.validate(false);
       if (initialized.migrated) {
-        void vscode.window.showInformationMessage(`Migrated ${initialized.notes.notes.length} notes to schema v3 without changing their IDs or content.`);
+        void vscode.window.showInformationMessage(`Migrated ${initialized.notes.notes.length} notes to schema v4 without changing their IDs or content.`);
       }
     } catch (error) {
       void vscode.window.showErrorMessage(`Cannot load Paper Notes in ${folder.name}: ${errorMessage(error)}`);
@@ -367,6 +389,7 @@ class PaperNotesController implements vscode.Disposable, PanelActions {
       () => store.project.annotatedPdf,
       () => store.project.notesPdf,
       context.workspaceState,
+      String(context.extension.packageJSON.version ?? '0.0.0'),
       this
     );
     this.buildManager = new BuildManager(
@@ -504,11 +527,22 @@ class PaperNotesController implements vscode.Disposable, PanelActions {
     if (!note.title.trim() || !Array.isArray(note.items)) {
       throw new Error('A note needs a title and a valid item list.');
     }
-    const allowedTypes = new Set<NoteType>(['thought', 'example', 'question', 'todo']);
     const allowedFormats = new Set<NoteFormat>(['markdown', 'latex-legacy']);
+    const customTypeIds = new Set(this.store.data.customTypes.map((type) => type.id));
+    const style = await inspectProjectStyle(this.folder.uri.fsPath, this.store.project);
     for (const item of note.items) {
-      if (!item.id || !allowedTypes.has(item.type) || !allowedFormats.has(item.format) || typeof item.content !== 'string') {
+      if (!item.id || !isNoteType(item.type) || !allowedFormats.has(item.format) || typeof item.content !== 'string') {
         throw new Error('The note contains an invalid item.');
+      }
+      if (item.type === 'custom') {
+        if (!item.customTypeId || !customTypeIds.has(item.customTypeId)) {
+          throw new Error('A custom annotation refers to a type that no longer exists. Open Manage Types to repair it.');
+        }
+      } else if (item.customTypeId !== undefined) {
+        throw new Error('A built-in annotation cannot contain a custom type ID.');
+      }
+      if (!style.compatible && (item.type === 'translation' || item.type === 'custom')) {
+        throw new Error('Upgrade the project notes style before adding Translation or Custom annotations.');
       }
       if (item.format === 'markdown' && containsRawHtml(item.content)) {
         void vscode.window.showWarningMessage('Raw HTML is saved as plain text. Use Markdown or LaTeX math instead.');
@@ -519,11 +553,108 @@ class PaperNotesController implements vscode.Disposable, PanelActions {
       title: note.title.trim(),
       excerptMode: note.excerptMode === 'manual' ? 'manual' : 'auto',
       excerpt: String(note.excerpt ?? ''),
-      items: note.items.map((item) => ({ id: item.id, type: item.type, format: item.format, content: item.content })),
+      items: note.items.map((item) => ({
+        id: item.id,
+        type: item.type,
+        ...(item.type === 'custom' ? { customTypeId: item.customTypeId } : {}),
+        format: item.format,
+        content: item.content
+      })),
       revision: note.revision ?? existing.revision ?? 0
     };
     await this.store.updateNote(sanitized);
     this.refreshCodeLens();
+  }
+
+  async createCustomType(input: { name: string; color: string }): Promise<void> {
+    await this.requireCurrentProjectStyle();
+    const type = createCustomNoteType(this.store.data.customTypes, input.name, input.color);
+    await this.store.addCustomType(type);
+    await this.panel.refresh();
+  }
+
+  async updateCustomType(input: CustomNoteType): Promise<void> {
+    await this.requireCurrentProjectStyle();
+    const updated = updateCustomNoteType(
+      this.store.data.customTypes,
+      input.id,
+      input.name,
+      input.color
+    );
+    await this.store.updateCustomType(updated);
+    await this.panel.refresh();
+  }
+
+  async deleteCustomType(id: string, replacement?: { type: NoteType; customTypeId?: string }): Promise<void> {
+    const type = this.store.data.customTypes.find((candidate) => candidate.id === id);
+    if (!type) {
+      throw new Error('This custom annotation type no longer exists.');
+    }
+    const usage = this.store.data.notes.reduce(
+      (count, note) => count + note.items.filter((item) => item.type === 'custom' && item.customTypeId === id).length,
+      0
+    );
+    if (usage > 0 && !replacement) {
+      throw new Error(`“${type.name}” is used by ${usage} item(s). Choose a replacement before deleting it.`);
+    }
+    const answer = await vscode.window.showWarningMessage(
+      usage > 0
+        ? `Replace ${usage} item(s) and delete the custom type “${type.name}”?`
+        : `Delete the unused custom type “${type.name}”?`,
+      { modal: true },
+      'Delete type'
+    );
+    if (answer !== 'Delete type') {
+      return;
+    }
+    await this.store.deleteCustomType(id, replacement);
+    await this.panel.refresh();
+  }
+
+  async upgradeProjectStyle(force = false): Promise<void> {
+    const status = await inspectProjectStyle(this.folder.uri.fsPath, this.store.project);
+    if (status.compatible) {
+      void vscode.window.showInformationMessage(`Project style v${status.expectedVersion} is already compatible.`);
+      return;
+    }
+    let allowForce = force;
+    if (status.kind === 'modified-old' && !force) {
+      await mkdir(this.context.globalStorageUri.fsPath, { recursive: true });
+      const previewPath = resolve(this.context.globalStorageUri.fsPath, 'paper-notes-style.v0.4.preview.sty');
+      await writeFile(previewPath, renderNotesStylePackage(this.store.project.notesDir), 'utf8');
+      const currentPath = await resolveInsideProject(this.folder.uri.fsPath, status.relativePath, false);
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        vscode.Uri.file(currentPath),
+        vscode.Uri.file(previewPath),
+        'Paper Notes project style: current ↔ v0.4 template'
+      );
+      const answer = await vscode.window.showWarningMessage(
+        'The notes style contains local changes. Replace it with the v0.4 template after creating a backup?',
+        { modal: true, detail: status.detail },
+        'Back up and upgrade'
+      );
+      if (answer !== 'Back up and upgrade') {
+        return;
+      }
+      allowForce = true;
+    }
+    const result = await upgradeProjectStyle(this.folder.uri.fsPath, this.store.project, { force: allowForce });
+    if (!result.upgraded) {
+      throw new Error(result.status.detail);
+    }
+    void vscode.window.showInformationMessage(
+      `Project notes style upgraded to v${result.status.expectedVersion}${result.backupFile ? `. Backup: ${result.backupFile}` : ''}.`
+    );
+    await this.store.save();
+    await this.panel.refresh();
+  }
+
+  private async requireCurrentProjectStyle(): Promise<void> {
+    const status = await inspectProjectStyle(this.folder.uri.fsPath, this.store.project);
+    if (!status.compatible) {
+      throw new Error('Upgrade the project notes style before using custom annotation types.');
+    }
   }
 
   async deleteNote(id: string): Promise<void> {
