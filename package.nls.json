@@ -14,6 +14,7 @@
   "command.doctor": "Paper Notes Project Diagnostics",
   "command.rescan": "Rescan Managed LaTeX Files",
   "command.repair": "Repair Paper Notes Integration",
+  "command.upgradeProjectFiles": "Upgrade Paper Notes Project Components",
   "configuration.title": "LaTeX Paper Notes",
   "configuration.dataFile": "Project-relative path to the schema v3 structured notes data.",
   "configuration.latexmk": "Optional machine-local latexmk executable name or absolute path; a direct-engine fallback is used when unavailable.",

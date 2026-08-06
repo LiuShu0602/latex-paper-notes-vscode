@@ -14,6 +14,7 @@
   "command.doctor": "论文笔记项目诊断",
   "command.rescan": "重新扫描受管 LaTeX 文件",
   "command.repair": "修复论文笔记集成",
+  "command.upgradeProjectFiles": "升级论文笔记项目组件",
   "configuration.title": "LaTeX 论文伴随笔记",
   "configuration.dataFile": "schema v3 结构化笔记数据的项目相对路径。",
   "configuration.latexmk": "可选的本机 latexmk 可执行文件名或绝对路径；不可用时自动改用引擎直接构建。",

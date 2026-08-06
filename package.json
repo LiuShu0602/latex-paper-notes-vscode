@@ -2,7 +2,7 @@
   "name": "latex-paper-notes",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.3.2",
+  "version": "0.4.0-beta.2",
   "publisher": "latex-paper-notes",
   "license": "MIT",
   "repository": {
@@ -122,6 +122,12 @@
         "title": "%command.repair%",
         "category": "%category%",
         "icon": "$(wrench)"
+      },
+      {
+        "command": "paperNotes.upgradeProjectFiles",
+        "title": "%command.upgradeProjectFiles%",
+        "category": "%category%",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
@@ -165,6 +171,10 @@
         },
         {
           "command": "paperNotes.repairIntegration",
+          "when": "paperNotes.projectReady && isWorkspaceTrusted"
+        },
+        {
+          "command": "paperNotes.upgradeProjectFiles",
           "when": "paperNotes.projectReady && isWorkspaceTrusted"
         }
       ]
@@ -237,10 +247,12 @@
     "test:webview": "python test/webview-smoke.py",
     "test:integration": "npm run build && node --import tsx test/integration/run.ts",
     "test:latex-render": "node --import tsx scripts/check-clean-render.ts",
+    "refresh:example": "node --import tsx scripts/refresh-example.ts",
     "test:all": "npm run check && npm run test && npm run build && npm run test:webview",
-    "package": "npm run test:all && vsce package --no-dependencies --no-rewrite-relative-links && node scripts/audit-vsix.mjs latex-paper-notes-0.3.2.vsix"
+    "package": "npm run test:all && vsce package --no-dependencies --no-rewrite-relative-links && node scripts/audit-vsix.mjs latex-paper-notes-0.4.0-beta.2.vsix"
   },
   "dependencies": {
+    "@vscode/codicons": "^0.0.36",
     "katex": "^0.16.22",
     "markdown-it": "^14.1.0",
     "pdfjs-dist": "^5.4.149"
@@ -252,8 +264,8 @@
     "@types/vscode": "^1.114.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.6.1",
-    "esbuild": "^0.25.0",
     "adm-zip": "^0.5.16",
+    "esbuild": "^0.25.0",
     "pdf-lib": "^1.17.1",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"

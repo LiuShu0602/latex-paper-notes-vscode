@@ -10,6 +10,12 @@ Apache License, Version 2.0. The complete license text is distributed in
 `PDFJS_LICENSE.txt`. The bundled viewer integration has been adapted for this
 extension's navigation and SyncTeX messages; PDF.js itself is not relicensed.
 
+## Visual Studio Code Codicons
+
+Copyright (c) Microsoft Corporation. The bundled Codicons font and CSS are
+licensed under the MIT License. They are used for accessible interface icons;
+the archived VS Code Webview UI Toolkit is not included.
+
 ## KaTeX
 
 The MIT License (MIT)

@@ -1,6 +1,16 @@
-# Migration to v0.3.x
+# Migration
 
-## From v0.2.x
+## From v0.3.x to v0.4.0-beta.1
+
+1. Commit or back up the paper project, then install the beta VSIX and manually run **Developer: Reload Window**.
+2. Open the project. Schema v3 data is migrated to schema v4, adding an empty `customTypes` list without changing notes.
+3. Confirm that `notes/legacy/paper-notes.schema3.bak.json` exists.
+4. Untouched public v0.3.x styles are backed up and upgraded automatically. A locally modified style is not overwritten; use **Upgrade Paper Notes Project Components** after reviewing the warning.
+5. Run diagnostics, marker validation, and a full build.
+
+Existing note IDs, timestamps, content, source selectors, and PDF destinations remain unchanged. Translation is manual-only and the extension performs no translation request or background network access.
+
+## From v0.2.x to v0.3.x
 
 1. Commit or back up your project.
 2. Install the latest v0.3.x VSIX and manually run **Developer: Reload Window**.

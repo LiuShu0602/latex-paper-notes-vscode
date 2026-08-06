@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0-beta.2
+
+- Isolated Paper Notes dialogs from PDF.js' global `.dialog` styles, fixing dark-on-dark and light-on-light text in the custom-type editor.
+- Applied VS Code dropdown/input colors and explicit light/dark color schemes to native selects, options, inputs, previews, and dialog headings.
+- Added browser contrast checks for custom-type dialogs and annotation-type selectors in both light and dark themes.
+
+## 0.4.0-beta.1
+
+- Added the manual-only Translation annotation and reusable project-level custom types with stable IDs, names, and colors.
+- Upgraded project data to schema v4 with lossless v1/v2/v3 migration and schema-numbered backups.
+- Added accessible color normalization plus PDF-safe colors, custom type declarations/items, and grouped type indices.
+- Rebuilt the Webview as a theme-adaptive macOS Notes × VS Code interface with one annotation menu, type management, responsive single-pane navigation, Codicons, keyboard menus, high-contrast support, and reduced motion.
+- Added project-style version/hash checks, safe automatic upgrades for untouched v0.3 styles, and a backup-first manual upgrade path for customized styles.
+- Split Webview state, note filtering, PDF session helpers, type registry, and common components into focused modules.
+- Fixed MiKTeX CI package installation to install and verify one package at a time.
+
 ## 0.3.2
 
 - Fixed false `makeindex` missing reports by using its portable usage probe instead of unsupported `--version`.

@@ -14,7 +14,7 @@ LaTeX Paper Notes is a local-first VS Code extension for keeping structured rese
 - Provides continuous PDF.js viewing, PDF search, navigation history, and forward/reverse SyncTeX.
 - Runs locally with no telemetry, cloud synchronization, or background network request.
 
-PDF text-selection annotation is not part of v0.3.x. Create notes from the LaTeX source editor.
+The v0.4 beta adds a manual Translation type and reusable custom types. Custom names and colors are project data; changing a definition updates every referencing item. PDF text-selection annotation is not part of this beta—create notes from the LaTeX source editor.
 
 ## Requirements
 
@@ -78,7 +78,7 @@ Some external PDF readers restrict cross-file links. The standalone notes PDF al
 
 ## Project data
 
-`notes/paper-notes.json` is schema v3 and is the authoritative structured data. `notes/main_notes.tex` is deterministic generated output and should not be edited manually. Both are intended for Git. Generated PDFs, SyncTeX files, LaTeX auxiliaries, `notes/build/`, `node_modules/`, `dist/`, and VSIX files are ignored.
+`notes/paper-notes.json` is schema v4 and is the authoritative structured data. `notes/main_notes.tex` is deterministic generated output and should not be edited manually. Both are intended for Git. Generated PDFs, SyncTeX files, LaTeX auxiliaries, `notes/build/`, `node_modules/`, `dist/`, and VSIX files are ignored.
 
 All stored project paths are relative POSIX paths. Absolute paths, `..` escapes, and symbolic links resolving outside the workspace folder are rejected. Executable locations are machine-scoped VS Code settings and never written into the project.
 
@@ -90,11 +90,11 @@ All stored project paths are relative POSIX paths. Absolute paths, `..` escapes,
 - **Validate Paper Notes Markers** reports incomplete pairs, nesting, overlap, duplicate IDs across files, source-only markers, and orphan JSON records.
 - **Relink Orphan Note to Selection** can use a manual selection or one of at most three confirmed exact/context candidates; fuzzy matches are never applied silently.
 - **Repair Paper Notes Integration** restores the delimited root block without touching paper prose.
-- Transactional saves retain `.last-good`; schema migration retains `notes/legacy/paper-notes.schema2.bak.json`.
+- Transactional saves retain `.last-good`; schema migration retains a numbered backup such as `notes/legacy/paper-notes.schema3.bak.json`.
 
 ## Legacy v0.2 migration
 
-Opening a schema v2 project performs a lossless v2→v3 migration. IDs, timestamps, content, excerpts, source selectors, and PDF destination names are preserved. Existing project build scripts migrate to `legacy-script` mode, so a private supplement workflow can continue unchanged. See [MIGRATION.md](MIGRATION.md).
+Opening a schema v1/v2/v3 project performs a lossless migration to v4. IDs, timestamps, content, excerpts, source selectors, and PDF destination names are preserved. Existing project build scripts migrate to `legacy-script` mode, so a private supplement workflow can continue unchanged. See [MIGRATION.md](MIGRATION.md).
 
 ## Privacy and scope
 

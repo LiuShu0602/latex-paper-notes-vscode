@@ -9,12 +9,12 @@ LaTeX Paper Notes 是一个本地优先的 VS Code 扩展：在论文 LaTeX 中�
 - 初始化前展示根文件、编译引擎、受管源码树以及每一项文件改动，只有确认后才写入。
 - 支持一个主文件及递归 `\input`、`\include`、`\subfile`、`\import`、`\subimport` 和字面量 `\InputIfFileExists` 子文件。
 - 可在任一已确认的受管子文件中从选区添加笔记。
-- 支持感想、例子、疑问、待修改四类 Markdown＋LaTeX 数学条目；旧 LaTeX 笔记块无损保留。
+- 支持感想、例子、疑问、待修改、翻译五类固定条目，以及项目级可复用的自定义类型；旧 LaTeX 笔记块无损保留。
 - 生成正常论文、批注论文和独立笔记 PDF，稳定目标保持为 `pnote.main.<id>` 与 `note.main.<id>`。
 - 内置连续滚动 PDF.js 阅读器、搜索、前进后退历史和 SyncTeX 正反向定位。
 - 无遥测、无云同步、无后台网络请求。
 
-v0.3.x 暂不支持直接在 PDF 选中文字添加笔记，请从 LaTeX 源码选区创建。
+v0.4 测试版中的“翻译”只供手工填写，不联网、不调用翻译 API。自定义类型可以统一改名和换色，所有引用会同步更新。本版仍不支持直接在 PDF 选中文字添加笔记，请从 LaTeX 源码选区创建。
 
 ## 环境要求
 
@@ -78,7 +78,7 @@ Selected paper text.
 
 ## 数据、诊断与恢复
 
-`notes/paper-notes.json` 是 schema v3 的权威数据；`notes/main_notes.tex` 是确定性生成文件，不应手工修改。两者都适合 Git 跟踪。PDF、SyncTeX、LaTeX 辅助文件、`notes/build/`、`node_modules/`、`dist/` 和 VSIX 会被忽略。
+`notes/paper-notes.json` 是 schema v4 的权威数据；`notes/main_notes.tex` 是确定性生成文件，不应手工修改。两者都适合 Git 跟踪。PDF、SyncTeX、LaTeX 辅助文件、`notes/build/`、`node_modules/`、`dist/` 和 VSIX 会被忽略。
 
 所有项目路径必须是项目内的相对 POSIX 路径；绝对路径、`..` 越界和解析到工作区外的符号链接会被拒绝。机器上的可执行文件位置只保存在 VS Code 用户设置。
 
@@ -88,11 +88,11 @@ Selected paper text.
 - “验证论文笔记标记”：检查缺端、嵌套、重叠、跨文件重复 ID、孤立标记和孤立 JSON。
 - “重新关联孤立笔记”：可用手工选区或最多三个候选；模糊候选绝不静默采用。
 - “修复论文笔记集成”：只修复有边界的集成块，不改论文内容。
-- 事务保存保留 `.last-good`；v2→v3 迁移保留 `notes/legacy/paper-notes.schema2.bak.json`。
+- 事务保存保留 `.last-good`；迁移会按原 schema 保留备份，例如 `notes/legacy/paper-notes.schema3.bak.json`。
 
 ## v0.2 迁移
 
-打开 schema v2 项目会无损升级到 v3：笔记 ID、时间、内容、摘录、定位器和 PDF 目标名称均保持不变。现有构建脚本会迁移为 `legacy-script` 模式，因此原有私有补充材料流程不受影响。详见 [MIGRATION.md](MIGRATION.md)。
+打开 schema v1/v2/v3 项目会无损升级到 v4：笔记 ID、时间、内容、摘录、定位器和 PDF 目标名称均保持不变。未修改的 v0.3 项目样式会先备份再自动升级；手工修改过的样式不会被静默覆盖。现有构建脚本会迁移为 `legacy-script` 模式，因此原有私有补充材料流程不受影响。详见 [MIGRATION.md](MIGRATION.md)。
 
 ## 隐私与范围
 
