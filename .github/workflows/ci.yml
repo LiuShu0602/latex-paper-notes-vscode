@@ -5,6 +5,10 @@ on:
     branches: ['**']
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   extension:
     runs-on: windows-latest
@@ -42,7 +46,21 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          choco install miktex --yes --no-progress
+          $miktexInstalled = $false
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            choco install miktex --yes --no-progress
+            if ($LASTEXITCODE -eq 0) {
+              $miktexInstalled = $true
+              break
+            }
+            Write-Warning "MiKTeX download attempt $attempt failed with exit code $LASTEXITCODE."
+            if ($attempt -lt 3) {
+              Start-Sleep -Seconds (15 * $attempt)
+            }
+          }
+          if (-not $miktexInstalled) {
+            throw 'MiKTeX installation failed after three attempts.'
+          }
           Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
           refreshenv
           initexmf --admin --update-fndb
