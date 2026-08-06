@@ -41,12 +41,21 @@ jobs:
       - name: Install MiKTeX
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
           choco install miktex --yes --no-progress
           Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
           refreshenv
           initexmf --admin --update-fndb
+          if ($LASTEXITCODE -ne 0) { throw "initexmf failed with exit code $LASTEXITCODE" }
           mpm --admin --update-db
-          mpm --admin --install=ctex,tcolorbox,imakeidx,xr-hyper
+          if ($LASTEXITCODE -ne 0) { throw "mpm database update failed with exit code $LASTEXITCODE" }
+          $packages = @('ctex', 'tcolorbox', 'imakeidx', 'xr-hyper')
+          foreach ($packageName in $packages) {
+            mpm --admin "--install=$packageName"
+            if ($LASTEXITCODE -ne 0) {
+              throw "MiKTeX package installation failed for $packageName with exit code $LASTEXITCODE"
+            }
+          }
       - run: npm ci
       - name: Exercise the built-in build without latexmk or Perl
         shell: powershell
