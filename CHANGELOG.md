@@ -2,7 +2,7 @@
 
 ## 0.4.0
 
-- Promoted extensible Translation and custom annotation types to the stable release after 53 unit tests, VS Code integration tests, light/dark/high-contrast browser tests, and full TeX Live example builds.
+- Promoted extensible Translation and custom annotation types to the stable release after 55 unit tests, VS Code integration tests, light/dark/high-contrast browser tests, and full TeX Live example builds.
 - Kept the custom-type dialog and native annotation selector readable across VS Code light, dark, and high-contrast themes.
 - Made the public example build script ASCII-safe so Windows PowerShell 5.1 cannot misdecode its Chinese index checks.
 - Verified clean-paper pixel identity and all three semantic PDF navigation directions.
