@@ -69,7 +69,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "initexmf failed with exit code $LASTEXITCODE" }
           mpm --admin --update-db
           if ($LASTEXITCODE -ne 0) { throw "mpm database update failed with exit code $LASTEXITCODE" }
-          $packages = @('ctex', 'tcolorbox', 'imakeidx', 'hyperref')
+          $packages = @('ctex', 'fandol', 'tcolorbox', 'imakeidx', 'hyperref')
           foreach ($packageName in $packages) {
             mpm --admin "--install=$packageName"
             if ($LASTEXITCODE -ne 0) {
