@@ -2,7 +2,7 @@
   "name": "latex-paper-notes",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.4.0-beta.2",
+  "version": "0.4.0",
   "publisher": "latex-paper-notes",
   "license": "MIT",
   "repository": {
@@ -249,7 +249,7 @@
     "test:latex-render": "node --import tsx scripts/check-clean-render.ts",
     "refresh:example": "node --import tsx scripts/refresh-example.ts",
     "test:all": "npm run check && npm run test && npm run build && npm run test:webview",
-    "package": "npm run test:all && vsce package --no-dependencies --no-rewrite-relative-links && node scripts/audit-vsix.mjs latex-paper-notes-0.4.0-beta.2.vsix"
+    "package": "npm run test:all && vsce package --no-dependencies --no-rewrite-relative-links && node scripts/audit-vsix.mjs latex-paper-notes-0.4.0.vsix"
   },
   "dependencies": {
     "@vscode/codicons": "^0.0.36",

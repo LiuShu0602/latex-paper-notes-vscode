@@ -9,12 +9,12 @@ LaTeX Paper Notes is a local-first VS Code extension for keeping structured rese
 - Initializes an existing paper only after showing the root file, engines, managed source tree, and every proposed file change.
 - Manages one root file plus recursive `\input`, `\include`, `\subfile`, `\import`, `\subimport`, and literal `\InputIfFileExists` dependencies.
 - Adds notes from selections in any confirmed managed source file.
-- Keeps thoughts, examples, questions, and revision tasks as Markdown with LaTeX math. Legacy LaTeX note blocks remain lossless.
+- Keeps five built-in types—thoughts, examples, questions, revision tasks, and manual translations—plus reusable project-level custom types. Legacy LaTeX note blocks remain lossless.
 - Generates a clean paper, annotated paper, and standalone notes PDF with stable `pnote.main.<id>` and `note.main.<id>` destinations.
 - Provides continuous PDF.js viewing, PDF search, navigation history, and forward/reverse SyncTeX.
 - Runs locally with no telemetry, cloud synchronization, or background network request.
 
-The v0.4 beta adds a manual Translation type and reusable custom types. Custom names and colors are project data; changing a definition updates every referencing item. PDF text-selection annotation is not part of this beta—create notes from the LaTeX source editor.
+Translation is manual-only: the extension makes no translation request. Custom names and colors are project data; changing a definition updates every referencing item. PDF text-selection annotation is not part of v0.4—create notes from the LaTeX source editor.
 
 ## Requirements
 
@@ -26,14 +26,14 @@ The v0.4 beta adds a manual Translation type and reusable custom types. Custom n
 
 ## Install the VSIX
 
-1. Download `latex-paper-notes-0.3.2.vsix` and its SHA-256 file.
+1. Download `latex-paper-notes-0.4.0.vsix` and its SHA-256 file.
 2. In VS Code, run **Extensions: Install from VSIX...**.
 3. Select the VSIX, then manually run **Developer: Reload Window**.
 
 Command-line alternative:
 
 ```powershell
-code --install-extension .\latex-paper-notes-0.3.2.vsix
+code --install-extension .\latex-paper-notes-0.4.0.vsix
 ```
 
 ## Initialize a paper

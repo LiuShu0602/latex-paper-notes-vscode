@@ -14,7 +14,7 @@ LaTeX Paper Notes 是一个本地优先的 VS Code 扩展：在论文 LaTeX 中�
 - 内置连续滚动 PDF.js 阅读器、搜索、前进后退历史和 SyncTeX 正反向定位。
 - 无遥测、无云同步、无后台网络请求。
 
-v0.4 测试版中的“翻译”只供手工填写，不联网、不调用翻译 API。自定义类型可以统一改名和换色，所有引用会同步更新。本版仍不支持直接在 PDF 选中文字添加笔记，请从 LaTeX 源码选区创建。
+“翻译”只供手工填写，不联网、不调用翻译 API。自定义类型可以统一改名和换色，所有引用会同步更新。v0.4 仍不支持直接在 PDF 选中文字添加笔记，请从 LaTeX 源码选区创建。
 
 ## 环境要求
 
@@ -26,14 +26,14 @@ v0.4 测试版中的“翻译”只供手工填写，不联网、不调用翻译
 
 ## 安装
 
-1. 获取 `latex-paper-notes-0.3.2.vsix` 和 SHA-256 文件。
+1. 获取 `latex-paper-notes-0.4.0.vsix` 和 SHA-256 文件。
 2. 在 VS Code 执行“Extensions: Install from VSIX...”并选择 VSIX。
 3. 安装后由你手动执行一次“Developer: Reload Window”。
 
 也可执行：
 
 ```powershell
-code --install-extension .\latex-paper-notes-0.3.2.vsix
+code --install-extension .\latex-paper-notes-0.4.0.vsix
 ```
 
 ## 一键初始化
@@ -92,12 +92,12 @@ Selected paper text.
 
 ## v0.2 迁移
 
-打开 schema v1/v2/v3 项目会无损升级到 v4：笔记 ID、时间、内容、摘录、定位器和 PDF 目标名称均保持不变。未修改的 v0.3 项目样式会先备份再自动升级；手工修改过的样式不会被静默覆盖。现有构建脚本会迁移为 `legacy-script` 模式，因此原有私有补充材料流程不受影响。详见 [MIGRATION.md](MIGRATION.md)。
+打开 schema v1/v2/v3 项目会无损升级到 v4：笔记 ID、时间、内容、摘录、定位器和 PDF 目标名称均保持不变。未修改的 v0.3 或 v0.4 beta 项目样式会先备份再自动升级；手工修改过的样式不会被静默覆盖。现有构建脚本会迁移为 `legacy-script` 模式，因此原有私有补充材料流程不受影响。详见 [MIGRATION.md](MIGRATION.md)。
 
 ## 隐私与范围
 
 公开 VSIX 不包含论文、笔记数据库、本机路径、凭据或研究 PDF。所有本地进程均用参数数组和 `shell: false` 启动；不受信任工作区禁用写入与构建。
 
-本版只管理主论文；补充材料管理、PDF 选区添加、表格/图片对象批注、实时协作与云同步不在 v0.3.x 范围内。
+本版只管理主论文；补充材料管理、PDF 选区添加、表格/图片对象批注、实时协作与云同步不在 v0.4 范围内。
 
 许可证：MIT。
