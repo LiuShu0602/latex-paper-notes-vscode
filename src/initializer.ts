@@ -205,7 +205,7 @@ export function renderAnnotatedWrapper(project: PaperNotesProject): string {
 export function renderNotesRoot(project: PaperNotesProject): string {
   const rootStem = posix.basename(project.rootFile, '.tex');
   return `% !TeX program = latexmk
-\\documentclass[11pt,a4paper]{ctexart}
+\\documentclass[11pt,a4paper,fontset=fandol]{ctexart}
 \\usepackage[margin=25mm]{geometry}
 \\usepackage{amsmath,amssymb,mathtools,booktabs,tabularx,graphicx,xcolor,xurl}
 \\usepackage{${project.notesDir}/paper-notes-style}
