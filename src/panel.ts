@@ -17,7 +17,7 @@ export interface PanelActions {
   deleteCustomType(id: string, replacement?: { type: NoteType; customTypeId?: string }): Promise<void>;
   upgradeProjectStyle(force?: boolean): Promise<void>;
   deleteNote(id: string): Promise<void>;
-  build(kind: 'quick' | 'full', origin?: BuildRequestOrigin): Promise<void>;
+  build(kind: 'quick' | 'full', origin?: BuildRequestOrigin): Promise<boolean>;
   validate(): Promise<boolean>;
   relink(id?: string): Promise<void>;
   importImage(noteId: string): Promise<string | undefined>;

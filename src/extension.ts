@@ -686,7 +686,7 @@ class PaperNotesController implements vscode.Disposable, PanelActions {
     await this.panel.refresh('notes');
   }
 
-  async build(kind: BuildKind, origin: BuildRequestOrigin = 'command'): Promise<void> {
+  async build(kind: BuildKind, origin: BuildRequestOrigin = 'command'): Promise<boolean> {
     await prepareBuild(origin, {
       flushPanel: () => this.panel.flushPending(),
       saveWorkspace: async () => { await vscode.workspace.saveAll(false); },
@@ -695,7 +695,7 @@ class PaperNotesController implements vscode.Disposable, PanelActions {
     if (!(await this.validate(false))) {
       throw new Error('Paper Notes has structural marker errors. The clean paper remains independently compilable.');
     }
-    await this.buildManager.run(kind);
+    return this.buildManager.run(kind);
   }
 
   async validate(showMessage = true): Promise<boolean> {
