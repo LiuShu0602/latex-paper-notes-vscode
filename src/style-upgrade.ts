@@ -50,7 +50,7 @@ export async function inspectProjectStyle(
         : 'Project style is v0.4-compatible and contains local modifications.'
     };
   }
-  const stockVersion = knownStockV03Version(content, project.notesDir);
+  const stockVersion = knownStockVersion(content, project.notesDir);
   if (stockVersion) {
     return {
       kind: 'stock-old', compatible: false, installedVersion: stockVersion,
@@ -126,7 +126,11 @@ export function verifyEmbeddedTemplateHash(content: string): boolean {
   return hashText(normalized) === embedded;
 }
 
-function knownStockV03Version(content: string, notesDir: string): string | undefined {
+function knownStockVersion(content: string, notesDir: string): string | undefined {
+  const installedVersion = extractStyleVersion(content);
+  if (installedVersion && /^0\.4\.0-beta\.\d+$/.test(installedVersion) && verifyEmbeddedTemplateHash(content)) {
+    return installedVersion;
+  }
   const normalized = normalizeNewlines(content);
   for (const version of ['0.3.0', '0.3.1', '0.3.2']) {
     if (normalized === normalizeNewlines(renderStockNotesStyleV03(notesDir, version))) {

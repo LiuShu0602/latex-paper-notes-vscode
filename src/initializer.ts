@@ -6,7 +6,7 @@ import { resolveInsideProject, type SourceGraph } from './project.js';
 
 export const INTEGRATION_BEGIN = '% >>> LaTeX Paper Notes integration >>>';
 export const INTEGRATION_END = '% <<< LaTeX Paper Notes integration <<<';
-export const PROJECT_STYLE_VERSION = '0.4.0-beta.1';
+export const PROJECT_STYLE_VERSION = '0.4.0';
 
 export interface InitializationOptions {
   rootFile: string;
